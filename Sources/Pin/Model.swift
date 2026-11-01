@@ -45,6 +45,8 @@ struct Draft: Equatable {
 
     func start() {
         reload()
+        // Opens where he left off, like any Mac app: there is no start page.
+        if app == nil, let name = [UserDefaults.standard.string(forKey: "lastFile")].compactMap({ $0 }).first(where: apps.contains) ?? apps.first { open(name) }
         guard timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.reload() }
@@ -54,7 +56,10 @@ struct Draft: Equatable {
     func reload() {
         let found = store.apps()
         if found != apps { apps = found }
-        guard let app else { return }
+        guard let app else {
+            if let first = found.first, timer != nil { open(first) }
+            return
+        }
         do {
             let list = try store.screens(app: app)
             if list != screens { screens = list }
@@ -70,19 +75,12 @@ struct Draft: Equatable {
 
     func open(_ name: String) {
         app = name
+        UserDefaults.standard.set(name, forKey: "lastFile")
         page = nil
         selected = nil
         draft = nil
         reload()
         fit()
-    }
-
-    func closeFile() {
-        app = nil
-        screens = []
-        threads = [:]
-        selected = nil
-        draft = nil
     }
 
     func choose(page name: String) {

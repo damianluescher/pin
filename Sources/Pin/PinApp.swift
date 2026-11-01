@@ -18,8 +18,7 @@ struct PinApp: App {
                 .preferredColorScheme(.dark)
                 .onAppear {
                     model.start()
-                    if let file = ProcessInfo.processInfo.environment["PIN_OPEN"] { model.open(file) }
-                    if let out = ProcessInfo.processInfo.environment["PIN_SHOT"] {
+                                        if let out = ProcessInfo.processInfo.environment["PIN_SHOT"] {
                         // A picture of the whole real window with its toolbar, for checking the look.
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                             guard let frame = NSApp.windows.first(where: { $0.isVisible })?.contentView?.superview,
@@ -47,8 +46,6 @@ struct PinApp: App {
             CommandMenu("Tools") {
                 Button("Comment (C)") { model.tool = .comment }
                 Button("Cursor (A or Esc)") { model.tool = .move }
-                Divider()
-                Button("All Files") { model.closeFile() }.keyboardShortcut("[", modifiers: .command).disabled(model.app == nil)
             }
         }
     }
@@ -65,7 +62,7 @@ struct RootView: View {
         } detail: {
             Group {
                 if model.app == nil {
-                    FilesPage()
+                    ContentUnavailableView("No files yet", systemImage: "doc.on.doc", description: Text("Agents add screens with the pin command."))
                 } else {
                     Canvas()
                         .inspector(isPresented: $showComments) {
@@ -73,7 +70,7 @@ struct RootView: View {
                         }
                 }
             }
-            .navigationTitle(model.app ?? "Files")
+            .navigationTitle(model.app ?? "Pin")
             .navigationSubtitle(model.app == nil ? "" : model.page ?? "")
             .toolbar { tools }
         }
@@ -89,9 +86,6 @@ struct RootView: View {
     @ToolbarContentBuilder private var tools: some ToolbarContent {
         @Bindable var model = model
         if model.app != nil {
-            ToolbarItem(placement: .navigation) {
-                Button { model.closeFile() } label: { Label("All Files", systemImage: "chevron.left") }.help("All files")
-            }
             ToolbarItem(placement: .principal) {
                 Picker("Tool", selection: $model.tool) {
                     Label("Cursor", systemImage: "cursorarrow").tag(Tool.move).help("Cursor (A or Esc)")
@@ -122,20 +116,31 @@ struct SideList: View {
     @Environment(Model.self) private var model
 
     var body: some View {
-        if model.app == nil {
-            List(selection: .constant("files" as String?)) {
-                Label("Files", systemImage: "square.grid.2x2").tag("files")
-                Section("Recent") {
-                    ForEach(model.apps, id: \.self) { name in
-                        Button { model.open(name) } label: { Label(name, systemImage: "doc") }.buttonStyle(.plain)
+        List(selection: pageSelection) {
+            Section("Files") {
+                ForEach(model.apps, id: \.self) { name in
+                    Button { model.open(name) } label: {
+                        Label {
+                            HStack {
+                                Text(name).lineLimit(1).fontWeight(name == model.app ? .semibold : .regular)
+                                Spacer(minLength: 0)
+                                let open = model.openCount(app: name)
+                                if open > 0 { Text("\(open)").font(.caption).foregroundStyle(.secondary) }
+                            }
+                        } icon: { Image(systemName: name == model.app ? "doc.fill" : "doc") }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button("Show in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([model.store.home.appendingPathComponent(name)])
+                        }
                     }
                 }
             }
-            .listStyle(.sidebar)
-        } else {
-            List(selection: pageSelection) {
+            if model.app != nil {
                 Section("Pages") {
-                    ForEach(model.pages, id: \.self) { name in Label(name, systemImage: "doc.richtext").tag(name) }
+                    ForEach(model.pages, id: \.self) { name in Label(name, systemImage: "rectangle.on.rectangle").tag(name) }
                 }
                 Section("Boards") {
                     ForEach(model.pageScreens) { screen in
@@ -153,8 +158,8 @@ struct SideList: View {
                     }
                 }
             }
-            .listStyle(.sidebar)
         }
+        .listStyle(.sidebar)
     }
 
     private var pageSelection: Binding<String?> {
