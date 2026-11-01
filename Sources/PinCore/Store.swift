@@ -1,0 +1,253 @@
+import Foundation
+import ImageIO
+
+// Everything Pin knows lives in plain files, so the app and the agents' `pin` command share it with no server:
+//   <home>/<app>/<screen>/screen.json          name, kind, versions
+//   <home>/<app>/<screen>/v3.png               the picture of version 3
+//   <home>/<app>/<screen>/threads/<id>.json    one comment thread, one file, so two writers never overwrite each other
+
+public enum Kind: String, Codable, CaseIterable, Sendable {
+    case iphone, mac, web
+    public var title: String {
+        switch self {
+        case .iphone: "iPhone"
+        case .mac: "Mac"
+        case .web: "Web"
+        }
+    }
+}
+
+public struct Version: Codable, Equatable, Identifiable, Sendable {
+    public var n: Int
+    public var file: String
+    public var created: Date
+    public var note: String?
+    public var id: Int { n }
+}
+
+public struct Screen: Codable, Equatable, Identifiable, Sendable {
+    public var id: String
+    public var name: String
+    public var kind: Kind
+    public var order: Int
+    /// The page it sits on, like a page in a design file. Without one it goes on a page named after its kind.
+    public var page: String?
+    /// Where the code of this screen is, for the agent that changes it.
+    public var source: String?
+    public var versions: [Version]
+    public var latest: Version? { versions.last }
+    public var pageName: String { page ?? kind.title }
+}
+
+public struct Message: Codable, Equatable, Identifiable, Sendable {
+    public var id: String
+    public var author: String
+    public var text: String
+    public var at: Date
+}
+
+public struct PinThread: Codable, Equatable, Identifiable, Sendable {
+    public var id: String
+    public var app: String
+    public var screen: String
+    public var version: Int
+    /// Where on the picture, as shares of its width and height.
+    public var x: Double
+    public var y: Double
+    public var resolved: Bool
+    public var created: Date
+    public var messages: [Message]
+}
+
+public enum PinError: LocalizedError, Equatable {
+    case notFound(String)
+    case invalid(String)
+    public var errorDescription: String? {
+        switch self {
+        case .notFound(let what): "Not found: \(what)"
+        case .invalid(let why): why
+        }
+    }
+}
+
+public struct Store: Sendable {
+    public let home: URL
+
+    public init(home: URL? = nil) {
+        if let home {
+            self.home = home
+        } else if let path = ProcessInfo.processInfo.environment["PIN_HOME"], !path.isEmpty {
+            self.home = URL(fileURLWithPath: path)
+        } else {
+            self.home = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Pin")
+        }
+    }
+
+    public static func slug(_ text: String) -> String {
+        let parts = text.lowercased().split { !($0.isLetter || $0.isNumber) }
+        return parts.joined(separator: "-")
+    }
+
+    // MARK: Reading
+
+    public func apps() -> [String] {
+        folders(in: home).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    public func screens(app: String) throws -> [Screen] {
+        try folders(in: appURL(app)).map { try screen(app: app, id: $0) }
+            .sorted { ($0.order, $0.name) < ($1.order, $1.name) }
+    }
+
+    public func screen(app: String, id: String) throws -> Screen {
+        let url = screenURL(app, id).appendingPathComponent("screen.json")
+        guard FileManager.default.fileExists(atPath: url.path) else { throw PinError.notFound("\(app)/\(id)") }
+        return try Self.decoder.decode(Screen.self, from: Data(contentsOf: url))
+    }
+
+    public func picture(app: String, screen: String, version: Version) -> URL {
+        screenURL(app, screen).appendingPathComponent(version.file)
+    }
+
+    /// Oldest first: a pin's number is its place in this list on its version.
+    public func threads(app: String, screen: String) throws -> [PinThread] {
+        let folder = screenURL(app, screen).appendingPathComponent("threads")
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        return try names.filter { $0.hasSuffix(".json") }
+            .map { try Self.decoder.decode(PinThread.self, from: Data(contentsOf: folder.appendingPathComponent($0))) }
+            .sorted { ($0.created, $0.id) < ($1.created, $1.id) }
+    }
+
+    public func thread(id: String) throws -> PinThread {
+        guard let found = try allThreads().first(where: { $0.id == id }) else { throw PinError.notFound("comment \(id)") }
+        return found
+    }
+
+    public func allThreads(app: String? = nil) throws -> [PinThread] {
+        try (app.map { [$0] } ?? apps()).flatMap { app in
+            try folders(in: appURL(app)).flatMap { try threads(app: app, screen: $0) }
+        }
+    }
+
+    // MARK: Changing
+
+    /// Adds a picture as the next version of a screen, making the app and the screen if they are new.
+    @discardableResult
+    public func addVersion(app: String, name: String, picture: URL, kind: Kind? = nil, note: String? = nil, source: String? = nil, page: String? = nil) throws -> (Screen, Version) {
+        let appID = app
+        guard !appID.isEmpty, !appID.contains("/"), !appID.hasPrefix(".") else { throw PinError.invalid("Bad app name: \(app)") }
+        let id = Self.slug(name)
+        guard !id.isEmpty else { throw PinError.invalid("Bad screen name: \(name)") }
+        guard Self.pictureSize(picture) != nil else { throw PinError.invalid("Not a picture: \(picture.path)") }
+        let existing = try? screen(app: appID, id: id)
+        if let existing, let kind, existing.kind != kind {
+            throw PinError.invalid("\(name) is already a \(existing.kind.rawValue) screen")
+        }
+        var current = existing ?? Screen(
+            id: id, name: name, kind: kind ?? .iphone,
+            order: ((try? screens(app: appID))?.map(\.order).max() ?? -1) + 1,
+            page: page, source: source, versions: [])
+        if let source { current.source = source }
+        if let page { current.page = page }
+        let folder = screenURL(appID, id)
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("threads"), withIntermediateDirectories: true)
+        let n = (current.versions.last?.n ?? 0) + 1
+        let ext = picture.pathExtension.isEmpty ? "png" : picture.pathExtension.lowercased()
+        let file = "v\(n).\(ext)"
+        let target = folder.appendingPathComponent(file)
+        try? FileManager.default.removeItem(at: target)
+        try FileManager.default.copyItem(at: picture, to: target)
+        let version = Version(n: n, file: file, created: Date(), note: note)
+        current.versions.append(version)
+        try write(current, to: folder.appendingPathComponent("screen.json"))
+        return (current, version)
+    }
+
+    @discardableResult
+    public func addThread(app: String, screen: String, version: Int, x: Double, y: Double, text: String, author: String) throws -> PinThread {
+        let found = try self.screen(app: app, id: screen)
+        guard found.versions.contains(where: { $0.n == version }) else { throw PinError.notFound("version \(version) of \(screen)") }
+        guard (0...1).contains(x), (0...1).contains(y) else { throw PinError.invalid("A pin must be on the picture") }
+        let clean = try Self.clean(text)
+        let now = Date()
+        let thread = PinThread(id: Self.newID(), app: app, screen: screen, version: version, x: x, y: y, resolved: false, created: now,
+                               messages: [Message(id: Self.newID(), author: author, text: clean, at: now)])
+        try save(thread)
+        return thread
+    }
+
+    @discardableResult
+    public func reply(thread id: String, text: String, author: String) throws -> PinThread {
+        var found = try thread(id: id)
+        found.messages.append(Message(id: Self.newID(), author: author, text: try Self.clean(text), at: Date()))
+        try save(found)
+        return found
+    }
+
+    @discardableResult
+    public func setResolved(thread id: String, _ resolved: Bool) throws -> PinThread {
+        var found = try thread(id: id)
+        found.resolved = resolved
+        try save(found)
+        return found
+    }
+
+    public func delete(thread id: String) throws {
+        let found = try thread(id: id)
+        try FileManager.default.removeItem(at: threadURL(found))
+    }
+
+    // MARK: Helpers
+
+    public static func pictureSize(_ url: URL) -> CGSize? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let info = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = info[kCGImagePropertyPixelWidth] as? Double,
+              let height = info[kCGImagePropertyPixelHeight] as? Double, width > 0, height > 0 else { return nil }
+        return CGSize(width: width, height: height)
+    }
+
+    private func appURL(_ app: String) -> URL { home.appendingPathComponent(app) }
+    private func screenURL(_ app: String, _ id: String) -> URL { appURL(app).appendingPathComponent(id) }
+    private func threadURL(_ t: PinThread) -> URL {
+        screenURL(t.app, t.screen).appendingPathComponent("threads/\(t.id).json")
+    }
+    private func save(_ thread: PinThread) throws { try write(thread, to: threadURL(thread)) }
+
+    private func folders(in url: URL) -> [String] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
+        return names.filter { name in
+            var isFolder: ObjCBool = false
+            return !name.hasPrefix(".") && FileManager.default.fileExists(atPath: url.appendingPathComponent(name).path, isDirectory: &isFolder) && isFolder.boolValue
+        }
+    }
+
+    private func write<T: Encodable>(_ value: T, to url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Self.encoder.encode(value).write(to: url, options: .atomic)
+    }
+
+    private static func clean(_ text: String) throws -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw PinError.invalid("A comment needs text") }
+        return trimmed
+    }
+
+    private static func newID() -> String {
+        let letters = Array("abcdefghjkmnpqrstuvwxyz23456789")
+        return String((0..<8).compactMap { _ in letters.randomElement() })
+    }
+
+    private static let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        e.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return e
+    }()
+
+    private static let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
+    }()
+}
