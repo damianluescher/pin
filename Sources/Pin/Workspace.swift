@@ -2,79 +2,6 @@ import AppKit
 import PinCore
 import SwiftUI
 
-/// A file open: pages and boards on the left, the canvas in the middle, comments on the right.
-struct Workspace: View {
-    @Environment(Model.self) private var model
-
-    var body: some View {
-        HStack(spacing: 0) {
-            LeftPanel()
-            Canvas()
-            CommentsPanel()
-        }
-        .ignoresSafeArea()
-    }
-}
-
-struct LeftPanel: View {
-    @Environment(Model.self) private var model
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
-                Button { model.closeFile() } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold)).frame(width: 24, height: 24).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain).foregroundStyle(Style.grey).help("All files")
-                Text(model.app ?? "").font(Style.strong).foregroundStyle(Style.ink).lineLimit(1)
-            }
-            .padding(.horizontal, 10)
-            .padding(.top, 44)
-            .padding(.bottom, 12)
-            Divider().overlay(Style.line)
-            heading("Pages")
-            VStack(spacing: 1) {
-                ForEach(model.pages, id: \.self) { name in
-                    Button { model.choose(page: name) } label: { Text(name).lineLimit(1) }.buttonStyle(SideRow(chosen: model.page == name))
-                }
-            }
-            .padding(.horizontal, 10)
-            Divider().overlay(Style.line).padding(.top, 12)
-            heading("Boards")
-            ScrollView {
-                VStack(spacing: 1) {
-                    ForEach(model.pageScreens) { screen in
-                        Button { model.reveal(screen) } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: icon(screen.kind)).font(.system(size: 11)).foregroundStyle(Style.grey).frame(width: 14)
-                                Text(screen.name).lineLimit(1)
-                                Spacer(minLength: 0)
-                                if let last = screen.latest, last.n > 1 { Text("v\(last.n)").font(Style.small).foregroundStyle(Style.grey) }
-                            }
-                        }
-                        .buttonStyle(SideRow())
-                    }
-                }
-                .padding(.horizontal, 10)
-            }
-        }
-        .frame(width: 240)
-        .background(Style.side)
-    }
-
-    private func heading(_ text: String) -> some View {
-        Text(text).font(Style.small.weight(.semibold)).foregroundStyle(Style.grey).padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 6)
-    }
-
-    private func icon(_ kind: Kind) -> String {
-        switch kind {
-        case .iphone: "iphone"
-        case .mac: "macwindow"
-        case .web: "globe"
-        }
-    }
-}
-
 struct Canvas: View {
     @Environment(Model.self) private var model
 
@@ -86,18 +13,12 @@ struct Canvas: View {
                 boards(in: box.size).allowsHitTesting(false)
                 pins.allowsHitTesting(false)
                 bubble(in: box.size)
-                toolbar(in: box.size)
             }
             .clipped()
-            .onAppear { sized(box.size) }
-            .onChange(of: box.size) { _, new in sized(new) }
+            .onAppear { model.sized(box.size) }
+            .onChange(of: box.size) { _, new in model.sized(new) }
+            .onChange(of: model.app) { model.sized(box.size) }
         }
-    }
-
-    private func sized(_ size: CGSize) {
-        let first = model.viewport != size
-        model.viewport = size
-        if first { model.fit() }
     }
 
     private func boards(in size: CGSize) -> some View {
@@ -158,49 +79,8 @@ struct Canvas: View {
 
     private func place(_ p: CGPoint, width: CGFloat, in size: CGSize) -> CGSize {
         let x = p.x + 22 + width > size.width - 12 ? p.x - 22 - width : p.x + 22
-        let y = min(max(p.y - 16, 56), size.height - 260)
+        let y = min(max(p.y - 16, 12), size.height - 260)
         return CGSize(width: max(x, 12), height: y)
-    }
-
-    private func toolbar(in size: CGSize) -> some View {
-        @Bindable var model = model
-        return HStack {
-            Spacer()
-            HStack(spacing: 2) {
-                tool(.move, "cursorarrow", "Cursor (A or Esc)")
-                tool(.comment, "text.bubble", "Comment (C)")
-            }
-            .padding(4)
-            .background(Capsule().fill(Style.side))
-            Spacer()
-        }
-        .overlay(alignment: .trailing) {
-            HStack(spacing: 2) {
-                Button { model.zoom(by: 0.8) } label: { Image(systemName: "minus").frame(width: 24, height: 24).contentShape(Rectangle()) }
-                Button { model.fit() } label: { Text("\(Int(model.scale * 100))%").font(Style.small).monospacedDigit().frame(width: 46, height: 24).contentShape(Rectangle()) }.help("Fit page")
-                Button { model.zoom(by: 1.25) } label: { Image(systemName: "plus").frame(width: 24, height: 24).contentShape(Rectangle()) }
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Style.ink)
-            .font(.system(size: 11, weight: .semibold))
-            .padding(4)
-            .background(Capsule().fill(Style.side))
-            .padding(.trailing, 12)
-        }
-        .padding(.top, 12)
-        .frame(width: size.width)
-    }
-
-    private func tool(_ which: Tool, _ icon: String, _ help: String) -> some View {
-        Button { model.tool = which } label: {
-            Image(systemName: icon).font(.system(size: 13, weight: .medium))
-                .frame(width: 32, height: 28)
-                .background(Capsule().fill(model.tool == which ? Color.white : .clear))
-                .foregroundStyle(model.tool == which ? .black : Style.ink)
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .help(help)
     }
 }
 
@@ -267,8 +147,7 @@ struct CanvasEvents: NSViewRepresentable {
                     model.zoom(by: 1 + event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 0.01 : 0.05), at: here(event))
                 } else {
                     let speed: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 10
-                    model.origin.x += event.scrollingDeltaX * speed
-                    model.origin.y += event.scrollingDeltaY * speed
+                    model.pan(event.scrollingDeltaX * speed, event.scrollingDeltaY * speed)
                 }
             }
         }
@@ -289,8 +168,7 @@ struct CanvasEvents: NSViewRepresentable {
             if !dragged, hypot(now.x - start.x, now.y - start.y) < 4 { return }
             dragged = true
             MainActor.assumeIsolated {
-                model?.origin.x += event.deltaX
-                model?.origin.y += event.deltaY
+                model?.pan(event.deltaX, event.deltaY)
             }
         }
 
@@ -420,24 +298,9 @@ struct CommentsPanel: View {
         @Bindable var model = model
         let list = model.allThreads.filter { !$0.resolved || model.showResolved }
         let done = model.allThreads.filter(\.resolved).count
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Comments").font(Style.strong).foregroundStyle(Style.ink)
-                Spacer()
-                Menu {
-                    Toggle("Show resolved (\(done))", isOn: $model.showResolved)
-                } label: {
-                    Image(systemName: "line.3.horizontal.decrease").font(.system(size: 12, weight: .medium)).foregroundStyle(Style.grey)
-                }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 44)
-            .padding(.bottom, 12)
-            Divider().overlay(Style.line)
+        Group {
             if list.isEmpty {
-                Text("Click a board to comment").font(Style.body).foregroundStyle(Style.grey).padding(14)
-                Spacer()
+                ContentUnavailableView("No comments", systemImage: "text.bubble", description: Text("Click a board to add one."))
             } else {
                 ScrollView {
                     VStack(spacing: 2) {
@@ -447,8 +310,13 @@ struct CommentsPanel: View {
                 }
             }
         }
-        .frame(width: 300)
-        .background(Style.side)
+        .safeAreaInset(edge: .bottom) {
+            if done > 0 {
+                Toggle("Show resolved (\(done))", isOn: $model.showResolved)
+                    .toggleStyle(.checkbox).font(Style.small).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(12).background(.bar)
+            }
+        }
     }
 
     private func row(_ thread: PinThread) -> some View {

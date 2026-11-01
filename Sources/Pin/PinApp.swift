@@ -16,9 +16,21 @@ struct PinApp: App {
                 .environment(model)
                 .frame(minWidth: 1000, minHeight: 640)
                 .preferredColorScheme(.dark)
-                .onAppear { model.start() }
+                .onAppear {
+                    model.start()
+                    if let file = ProcessInfo.processInfo.environment["PIN_OPEN"] { model.open(file) }
+                    if let out = ProcessInfo.processInfo.environment["PIN_SHOT"] {
+                        // A picture of the whole real window with its toolbar, for checking the look.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                            guard let frame = NSApp.windows.first(where: { $0.isVisible })?.contentView?.superview,
+                                  let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else { return }
+                            frame.cacheDisplay(in: frame.bounds, to: rep)
+                            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out))
+                        }
+                    }
+                }
         }
-        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified)
         .defaultSize(width: 1440, height: 920)
         .windowResizability(.contentMinSize)
         .commands {
@@ -44,16 +56,116 @@ struct PinApp: App {
 
 struct RootView: View {
     @Environment(Model.self) private var model
+    @AppStorage("showComments") private var showComments = true
+
     var body: some View {
-        Group {
-            if model.app == nil { FilesPage() } else { Workspace() }
+        @Bindable var model = model
+        NavigationSplitView {
+            SideList().navigationSplitViewColumnWidth(min: 180, ideal: 230, max: 320)
+        } detail: {
+            Group {
+                if model.app == nil {
+                    FilesPage()
+                } else {
+                    Canvas()
+                        .inspector(isPresented: $showComments) {
+                            CommentsPanel().inspectorColumnWidth(min: 260, ideal: 300, max: 400)
+                        }
+                }
+            }
+            .navigationTitle(model.app ?? "Files")
+            .navigationSubtitle(model.app == nil ? "" : model.page ?? "")
+            .toolbar { tools }
         }
         .overlay(alignment: .bottom) {
             if let failure = model.failure {
-                Text(failure).font(Style.body).foregroundStyle(Style.ink).padding(10)
+                Text(failure).font(Style.body).padding(10)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.45, green: 0.12, blue: 0.12)))
                     .padding(Style.gap)
             }
+        }
+    }
+
+    @ToolbarContentBuilder private var tools: some ToolbarContent {
+        @Bindable var model = model
+        if model.app != nil {
+            ToolbarItem(placement: .navigation) {
+                Button { model.closeFile() } label: { Label("All Files", systemImage: "chevron.left") }.help("All files")
+            }
+            ToolbarItem(placement: .principal) {
+                Picker("Tool", selection: $model.tool) {
+                    Label("Cursor", systemImage: "cursorarrow").tag(Tool.move).help("Cursor (A or Esc)")
+                    Label("Comment", systemImage: "text.bubble").tag(Tool.comment).help("Comment (C)")
+                }
+                .pickerStyle(.segmented).labelStyle(.iconOnly)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Menu("\(Int(model.scale * 100))%") {
+                    Button("Zoom In") { model.zoom(by: 1.25) }
+                    Button("Zoom Out") { model.zoom(by: 0.8) }
+                    Button("Actual Size") { model.actualSize() }
+                    Button("Fit Page") { model.fit() }
+                    Divider()
+                    Toggle("Show All Versions", isOn: $model.showAllVersions)
+                }
+                .monospacedDigit()
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button { showComments.toggle() } label: { Label("Comments", systemImage: "sidebar.right") }.help("Comments")
+            }
+        }
+    }
+}
+
+/// The real Mac sidebar: files, or a file's pages and boards.
+struct SideList: View {
+    @Environment(Model.self) private var model
+
+    var body: some View {
+        if model.app == nil {
+            List(selection: .constant("files" as String?)) {
+                Label("Files", systemImage: "square.grid.2x2").tag("files")
+                Section("Recent") {
+                    ForEach(model.apps, id: \.self) { name in
+                        Button { model.open(name) } label: { Label(name, systemImage: "doc") }.buttonStyle(.plain)
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+        } else {
+            List(selection: pageSelection) {
+                Section("Pages") {
+                    ForEach(model.pages, id: \.self) { name in Label(name, systemImage: "doc.richtext").tag(name) }
+                }
+                Section("Boards") {
+                    ForEach(model.pageScreens) { screen in
+                        Button { model.reveal(screen) } label: {
+                            Label {
+                                HStack {
+                                    Text(screen.name).lineLimit(1)
+                                    Spacer(minLength: 0)
+                                    if let last = screen.latest, last.n > 1 { Text("v\(last.n)").font(.caption).foregroundStyle(.secondary) }
+                                }
+                            } icon: { Image(systemName: icon(screen.kind)) }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+        }
+    }
+
+    private var pageSelection: Binding<String?> {
+        Binding(get: { model.page }, set: { if let name = $0 { model.choose(page: name) } })
+    }
+
+    private func icon(_ kind: Kind) -> String {
+        switch kind {
+        case .iphone: "iphone"
+        case .mac: "macwindow"
+        case .web: "globe"
         }
     }
 }

@@ -39,6 +39,8 @@ struct Draft: Equatable {
     var showResolved = false
     var showAllVersions = false
 
+    /// Stays fitted while the window settles or resizes, until he moves or zooms himself.
+    var keepFitted = true
     private var timer: Timer?
 
     func start() {
@@ -169,6 +171,7 @@ struct Draft: Equatable {
     }
 
     func zoom(by factor: CGFloat, at point: CGPoint? = nil) {
+        keepFitted = false
         let anchor = point ?? CGPoint(x: viewport.width / 2, y: viewport.height / 2)
         let next = min(max(scale * factor, 0.05), 8)
         let change = next / scale
@@ -178,7 +181,20 @@ struct Draft: Equatable {
 
     func actualSize() { zoom(by: 1 / scale) }
 
+    func pan(_ x: CGFloat, _ y: CGFloat) {
+        keepFitted = false
+        origin.x += x
+        origin.y += y
+    }
+
+    func sized(_ size: CGSize) {
+        viewport = size
+        if keepFitted { fit() }
+    }
+
     func fit() {
+        keepFitted = true
+        guard viewport.width > 100, viewport.height > 100 else { return }
         let boxes = placed.map(\.rect)
         guard let first = boxes.first else { return }
         let all = boxes.reduce(first) { $0.union($1) }
@@ -196,12 +212,12 @@ struct Draft: Equatable {
         draft = nil
         if !placed.contains(where: { $0.screen.id == thread.screen && $0.version.n == thread.version }) { showAllVersions = true }
         if let point = pinPoint(thread) {
-            origin.x += viewport.width * 0.42 - point.x
-            origin.y += viewport.height * 0.42 - point.y
+            pan(viewport.width * 0.42 - point.x, viewport.height * 0.42 - point.y)
         }
     }
 
     func reveal(_ screen: Screen) {
+        keepFitted = false
         guard let box = placed.last(where: { $0.screen.id == screen.id }) else { return }
         let next = min((viewport.width - 120) / box.rect.width, (viewport.height - 120) / box.rect.height, 1)
         scale = max(next, 0.05)
