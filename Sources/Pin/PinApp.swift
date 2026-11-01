@@ -33,6 +33,10 @@ struct PinApp: App {
                                                        y: (env["PIN_Y"].flatMap(Double.init) ?? 0) - corner.y * zoom)
                             }
                         }
+                        // For checking: PIN_FILM=FOLDER zooms in and out by small steps and saves a picture of each.
+                        if let folder = env["PIN_FILM"] {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { Film.run(model, folder: folder) }
+                        }
                         // For measuring: PIN_BENCH=1 moves the canvas for 5 seconds and writes how smooth it was.
                         if env["PIN_BENCH"] != nil {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { Bench.run(model) }
@@ -432,5 +436,31 @@ final class PressCheck {
         }
         then(1) { self.say("done"); exit(0) }
         run()
+    }
+}
+
+
+/// A filmstrip of the zoom, for looking at what really moves: the same anchor all the way, so nothing but the size may change.
+@MainActor
+enum Film {
+    static func run(_ model: Model, folder: String) {
+        let steps: [CGFloat] = Array(repeating: 1.12, count: 14) + Array(repeating: 1 / 1.12, count: 14)
+        let anchor = CGPoint(x: model.viewport.width / 2, y: model.viewport.height / 2)
+        func step(_ i: Int) {
+            guard i < steps.count else { exit(0) }
+            model.zoom(by: steps[i], at: anchor)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) {
+                MainActor.assumeIsolated {
+                    if let view = NSApp.windows.first(where: { $0.isVisible })?.contentView?.superview,
+                       let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                        view.cacheDisplay(in: view.bounds, to: rep)
+                        let name = String(format: "%@/%02d.png", folder, i)
+                        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: name))
+                    }
+                    step(i + 1)
+                }
+            }
+        }
+        step(0)
     }
 }
