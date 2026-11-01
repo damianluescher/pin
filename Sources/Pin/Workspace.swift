@@ -45,27 +45,29 @@ struct Canvas: View {
 
     /// The flow: a curved arrow from each board to the one it leads to, with what you tap on it.
     private var flowArrows: some View {
-        let lines = model.flowLines.map { (model.onScreen($0.from), model.onScreen($0.to), $0.label) }
+        let scale = model.scale
+        let lines = model.flowLines.map { (model.onScreen($0.from), model.onScreen($0.to), $0.rise * scale, $0.label) }
         return SwiftUI.Canvas { context, _ in
             let ink = Color.white.opacity(0.6)
-            for (start, end, label) in lines {
-                let pull = max(abs(end.x - start.x) / 2, 40)
-                let tip = CGPoint(x: end.x - 2, y: end.y)
+            for (start, end, rise, label) in lines {
+                let top = min(start.y, end.y) - rise
+                let tip = CGPoint(x: end.x, y: end.y - 3)
                 var line = Path()
                 line.move(to: start)
-                line.addCurve(to: CGPoint(x: tip.x - 6, y: tip.y),
-                              control1: CGPoint(x: start.x + pull, y: start.y),
-                              control2: CGPoint(x: tip.x - pull, y: tip.y))
+                line.addCurve(to: CGPoint(x: tip.x, y: tip.y - 8),
+                              control1: CGPoint(x: start.x, y: top),
+                              control2: CGPoint(x: tip.x, y: top))
                 context.stroke(line, with: .color(ink), lineWidth: 1.5)
                 var head = Path()
                 head.move(to: tip)
-                head.addLine(to: CGPoint(x: tip.x - 9, y: tip.y - 5))
-                head.addLine(to: CGPoint(x: tip.x - 9, y: tip.y + 5))
+                head.addLine(to: CGPoint(x: tip.x - 5, y: tip.y - 9))
+                head.addLine(to: CGPoint(x: tip.x + 5, y: tip.y - 9))
                 head.closeSubpath()
                 context.fill(head, with: .color(ink))
                 if let label {
                     let text = context.resolve(Text(label).font(Style.small).foregroundColor(Style.ink))
-                    let middle = CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
+                    // The curve's highest point sits three quarters of the way up to its handles.
+                    let middle = CGPoint(x: (start.x + tip.x) / 2, y: (start.y + tip.y) / 2 * 0.25 + top * 0.75)
                     let size = text.measure(in: CGSize(width: 220, height: 40))
                     let plate = CGRect(x: middle.x - size.width / 2 - 6, y: middle.y - size.height / 2 - 3, width: size.width + 12, height: size.height + 6)
                     context.fill(Path(roundedRect: plate, cornerRadius: 6), with: .color(Style.raised))
