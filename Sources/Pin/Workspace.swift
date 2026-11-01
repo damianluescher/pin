@@ -187,6 +187,7 @@ struct CanvasEvents: NSViewRepresentable {
         }
         private var pressed: NSPoint?
         private var dragged = false
+        private var movingBoard = false
 
         override var isFlipped: Bool { true }
         /// The real size of the canvas, from the view that fills it.
@@ -223,6 +224,8 @@ struct CanvasEvents: NSViewRepresentable {
             window?.makeFirstResponder(self)
             pressed = here(event)
             dragged = false
+            let point = here(event)
+            movingBoard = MainActor.assumeIsolated { model?.beginMove(at: point) ?? false }
         }
 
         override func mouseDragged(with event: NSEvent) {
@@ -231,7 +234,7 @@ struct CanvasEvents: NSViewRepresentable {
             if !dragged, hypot(now.x - start.x, now.y - start.y) < 4 { return }
             dragged = true
             MainActor.assumeIsolated {
-                model?.pan(event.deltaX, event.deltaY)
+                if movingBoard { model?.move(event.deltaX, event.deltaY) } else { model?.pan(event.deltaX, event.deltaY) }
             }
         }
 
@@ -241,7 +244,11 @@ struct CanvasEvents: NSViewRepresentable {
         }
 
         override func mouseUp(with event: NSEvent) {
-            if !dragged { MainActor.assumeIsolated { model?.click(at: here(event)) } }
+            MainActor.assumeIsolated {
+                if movingBoard { model?.endMove() }
+                if !dragged { model?.click(at: here(event)) }
+            }
+            movingBoard = false
             pressed = nil
         }
 

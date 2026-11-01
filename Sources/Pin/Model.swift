@@ -29,6 +29,10 @@ struct Draft: Equatable {
     var threads: [String: [PinThread]] = [:]
     var flows: [FlowEdge] = []
     var showFlows = true
+    /// Boards he dragged somewhere; the rest keep the automatic layout.
+    var positions: [String: CGPoint] = [:]
+    /// The board being dragged with the cursor tool.
+    private var dragging: String?
     var failure: String?
 
     var page: String?
@@ -44,6 +48,7 @@ struct Draft: Equatable {
     /// Stays fitted while the window settles or resizes, until he moves or zooms himself.
     var keepFitted = true
     private var timer: Timer?
+    private var lastFitted: [Screen] = []
 
     func start() {
         reload()
@@ -69,8 +74,14 @@ struct Draft: Equatable {
             for screen in list { next[screen.id] = try store.threads(app: app, screen: screen.id) }
             if next != threads { threads = next }
             let steps = try store.flows(app: app)
-            if steps != flows { flows = steps }
+            let flowsChanged = steps != flows
+            if flowsChanged { flows = steps }
+            if dragging == nil {
+                let saved = try store.positions(app: app).compactMapValues { $0.count == 2 ? CGPoint(x: $0[0], y: $0[1]) : nil }
+                if saved != positions { positions = saved }
+            }
             if page == nil || !pages.contains(page ?? "") { page = pages.first }
+            if keepFitted, flowsChanged || list != lastFitted { lastFitted = list; fit() }
             failure = nil
         } catch {
             failure = error.localizedDescription
@@ -107,6 +118,16 @@ struct Draft: Equatable {
     /// Boards as a flow when the page has one: each step one column further right, branches stacked.
     /// Boards with no step, and pages with none, run left to right in rows. A board's previous version sits on its left.
     var placed: [Placed] {
+        // A dragged board goes where he put it, its older version still on its left.
+        autoPlaced.map { item in
+            guard let spot = positions[item.screen.id],
+                  let first = autoPlaced.first(where: { $0.screen.id == item.screen.id }) else { return item }
+            return Placed(screen: item.screen, version: item.version,
+                          rect: item.rect.offsetBy(dx: spot.x - first.rect.minX, dy: spot.y - first.rect.minY))
+        }
+    }
+
+    private var autoPlaced: [Placed] {
         let screens = pageScreens
         let ids = Set(screens.map(\.id))
         let steps = flows.filter { ids.contains($0.from) && ids.contains($0.to) }
@@ -192,6 +213,28 @@ struct Draft: Equatable {
     }
 
     private static let arcRise: CGFloat = 110
+
+    // MARK: Moving boards
+
+    /// Starts moving the board under the point, if any. Only with the cursor tool: the comment tool clicks on boards.
+    func beginMove(at point: CGPoint) -> Bool {
+        guard tool == .move, let box = placed.last(where: { onScreen($0.rect).contains(point) }) else { return false }
+        dragging = box.screen.id
+        keepFitted = false
+        return true
+    }
+
+    func move(_ dx: CGFloat, _ dy: CGFloat) {
+        guard let id = dragging, let first = placed.first(where: { $0.screen.id == id }) else { return }
+        positions[id] = CGPoint(x: first.rect.minX + dx / scale, y: first.rect.minY + dy / scale)
+    }
+
+    func endMove() {
+        guard let id = dragging else { return }
+        dragging = nil
+        guard let app, let spot = positions[id] else { return }
+        change { try $0.setPosition(app: app, screen: id, x: spot.x, y: spot.y) }
+    }
 
     func threads(on placed: Placed) -> [PinThread] {
         (threads[placed.screen.id] ?? []).filter { $0.version == placed.version.n }

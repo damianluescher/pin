@@ -60,6 +60,13 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(try store.flows(app: "10"), [])
     }
 
+    func testBoardPositionsAreKept() throws {
+        try store.addVersion(app: "10", name: "Today", picture: picture)
+        try store.setPosition(app: "10", screen: "today", x: 12, y: -30)
+        XCTAssertEqual(try store.positions(app: "10"), ["today": [12, -30]])
+        XCTAssertThrowsError(try store.setPosition(app: "10", screen: "nope", x: 0, y: 0))
+    }
+
     func testSlug() {
         XCTAssertEqual(Store.slug("Today · Good"), "today-good")
     }

@@ -231,6 +231,24 @@ public struct Store: Sendable {
         try write(try flows(app: app).filter { !($0.from == from && $0.to == to) }, to: flowsURL(app))
     }
 
+    // MARK: Where boards sit
+
+    private func positionsURL(_ app: String) -> URL { appURL(app).appendingPathComponent("positions.json") }
+
+    /// Boards he dragged somewhere, by screen id, as [x, y] in canvas units.
+    public func positions(app: String) throws -> [String: [Double]] {
+        let url = positionsURL(app)
+        guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
+        return try Self.decoder.decode([String: [Double]].self, from: Data(contentsOf: url))
+    }
+
+    public func setPosition(app: String, screen id: String, x: Double, y: Double) throws {
+        _ = try screen(app: app, id: id)
+        var all = try positions(app: app)
+        all[id] = [x, y]
+        try write(all, to: positionsURL(app))
+    }
+
     // MARK: Helpers
 
     public static func pictureSize(_ url: URL) -> CGSize? {
