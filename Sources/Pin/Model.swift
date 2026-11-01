@@ -141,13 +141,23 @@ struct Draft: Equatable {
             for _ in screens {
                 for step in steps { depth[step.to] = max(depth[step.to] ?? 0, (depth[step.from] ?? 0) + 1) }
             }
-            // One row, so boards stay large; the arrows arc over the top.
-            let order = screens.filter { linked.contains($0.id) }.enumerated()
-                .sorted { (depth[$0.element.id] ?? 0, $0.offset) < (depth[$1.element.id] ?? 0, $1.offset) }.map(\.element)
-            for screen in order {
-                let (items, size) = block(screen, at: CGPoint(x: x, y: 0), gap: gap)
-                out += items
-                x += size.width + gap * 1.5
+            // Left to right, branches stacked and each column centred on the others, as in fal, n8n and Zapier.
+            let columns = Set(linked.map { depth[$0] ?? 0 }).sorted().map { column in
+                screens.filter { linked.contains($0.id) && (depth[$0.id] ?? 0) == column }
+            }
+            func height(_ column: [Screen]) -> CGFloat {
+                column.map { block($0, at: .zero, gap: gap).1.height }.reduce(0, +) + gap * CGFloat(column.count - 1)
+            }
+            let tallest = columns.map(height).max() ?? 0
+            for column in columns {
+                var y = (tallest - height(column)) / 2, width: CGFloat = 0
+                for screen in column {
+                    let (items, size) = block(screen, at: CGPoint(x: x, y: y), gap: gap)
+                    out += items
+                    y += size.height + gap
+                    width = max(width, size.width)
+                }
+                x += width + 420
             }
         }
         let origin = x
@@ -194,25 +204,20 @@ struct Draft: Equatable {
         return CGSize(width: pixels.width / factor, height: pixels.height / factor)
     }
 
-    /// The arrows of the open page in canvas units: from the top of one board up and over to the top of another.
-    var flowLines: [(from: CGPoint, to: CGPoint, rise: CGFloat, label: String?)] {
+    /// The lines of the open page in canvas units: out of one board's side, into another's.
+    var flowLines: [(from: CGPoint, to: CGPoint, label: String?)] {
         guard showFlows else { return [] }
         let boxes = placed
-        let order = boxes.map(\.screen.id).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
-        var out: [(from: CGPoint, to: CGPoint, rise: CGFloat, label: String?)] = []
-        for step in flows {
+        return flows.compactMap { step in
             guard let start = boxes.last(where: { $0.screen.id == step.from }),
-                  let end = boxes.first(where: { $0.screen.id == step.to }),
-                  let i = order.firstIndex(of: step.from), let j = order.firstIndex(of: step.to) else { continue }
-            let leaving = flows.filter { $0.from == step.from && order.contains($0.to) }
-            let place = CGFloat(leaving.firstIndex(of: step) ?? 0) - CGFloat(leaving.count - 1) / 2
-            out.append((CGPoint(x: start.rect.midX + place * 36, y: start.rect.minY),
-                        CGPoint(x: end.rect.midX, y: end.rect.minY), Self.arcRise * CGFloat(abs(j - i)), step.label))
+                  let end = boxes.first(where: { $0.screen.id == step.to }) else { return nil }
+            // A board he dragged to the left of the other is joined on those sides instead.
+            if end.rect.minX >= start.rect.maxX {
+                return (CGPoint(x: start.rect.maxX, y: start.rect.midY), CGPoint(x: end.rect.minX, y: end.rect.midY), step.label)
+            }
+            return (CGPoint(x: start.rect.minX, y: start.rect.midY), CGPoint(x: end.rect.maxX, y: end.rect.midY), step.label)
         }
-        return out
     }
-
-    private static let arcRise: CGFloat = 110
 
     // MARK: Moving boards
 
@@ -297,11 +302,7 @@ struct Draft: Equatable {
         guard viewport.width > 100, viewport.height > 100 else { return }
         let boxes = placed.map(\.rect)
         guard let first = boxes.first else { return }
-        var all = boxes.reduce(first) { $0.union($1) }
-        // Room for the arrows over the boards.
-        if let top = flowLines.map(\.rise).max() {
-            all = all.union(CGRect(x: all.minX, y: all.minY - top - 60, width: 1, height: 1))
-        }
+        let all = boxes.reduce(first) { $0.union($1) }
         let room: CGFloat = 60
         let next = min((viewport.width - 2 * room) / all.width, (viewport.height - 2 * room) / all.height, 1)
         scale = max(next, 0.05)

@@ -43,35 +43,28 @@ struct Canvas: View {
         }
     }
 
-    /// The flow: a curved arrow from each board to the one it leads to, with what you tap on it.
+    /// The flow, the way node canvases draw it: a thin S-curve from a dot on one board's side to a dot on the next,
+    /// branches leaving from one dot, and the label as plain small text on the line's last stretch.
     private var flowArrows: some View {
-        let scale = model.scale
-        let lines = model.flowLines.map { (model.onScreen($0.from), model.onScreen($0.to), $0.rise * scale, $0.label) }
+        let lines = model.flowLines.map { (model.onScreen($0.from), model.onScreen($0.to), $0.label) }
         return SwiftUI.Canvas { context, _ in
-            let ink = Color.white.opacity(0.6)
-            for (start, end, rise, label) in lines {
-                let top = min(start.y, end.y) - rise
-                let tip = CGPoint(x: end.x, y: end.y - 3)
+            let ink = Color.white.opacity(0.42)
+            let port: CGFloat = 4
+            for (start, end, _) in lines {
+                let pull = max(abs(end.x - start.x) * 0.5, 30) * (end.x >= start.x ? 1 : -1)
                 var line = Path()
                 line.move(to: start)
-                line.addCurve(to: CGPoint(x: tip.x, y: tip.y - 8),
-                              control1: CGPoint(x: start.x, y: top),
-                              control2: CGPoint(x: tip.x, y: top))
+                line.addCurve(to: end, control1: CGPoint(x: start.x + pull, y: start.y), control2: CGPoint(x: end.x - pull, y: end.y))
                 context.stroke(line, with: .color(ink), lineWidth: 1.5)
-                var head = Path()
-                head.move(to: tip)
-                head.addLine(to: CGPoint(x: tip.x - 5, y: tip.y - 9))
-                head.addLine(to: CGPoint(x: tip.x + 5, y: tip.y - 9))
-                head.closeSubpath()
-                context.fill(head, with: .color(ink))
+            }
+            for (start, end, label) in lines {
+                for dot in [start, end] {
+                    context.fill(Path(ellipseIn: CGRect(x: dot.x - port, y: dot.y - port, width: port * 2, height: port * 2)), with: .color(Color(white: 0.75)))
+                }
                 if let label {
-                    let text = context.resolve(Text(label).font(Style.small).foregroundColor(Style.ink))
-                    // The curve's highest point sits three quarters of the way up to its handles.
-                    let middle = CGPoint(x: (start.x + tip.x) / 2, y: (start.y + tip.y) / 2 * 0.25 + top * 0.75)
-                    let size = text.measure(in: CGSize(width: 220, height: 40))
-                    let plate = CGRect(x: middle.x - size.width / 2 - 6, y: middle.y - size.height / 2 - 3, width: size.width + 12, height: size.height + 6)
-                    context.fill(Path(roundedRect: plate, cornerRadius: 6), with: .color(Style.raised))
-                    context.draw(text, at: middle)
+                    let text = context.resolve(Text(label).font(Style.small).foregroundColor(Style.grey))
+                    let leftward = end.x < start.x
+                    context.draw(text, at: CGPoint(x: end.x + (leftward ? 12 : -12), y: end.y - 13), anchor: leftward ? .leading : .trailing)
                 }
             }
         }
