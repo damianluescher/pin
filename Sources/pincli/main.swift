@@ -10,6 +10,7 @@ pin add APP SCREEN PICTURE [--kind iphone|mac|web] [--page NAME] [--note TEXT] [
 pin flow APP FROM TO [--label TEXT]     an arrow between two boards
 pin unflow APP FROM TO
 pin flows APP
+pin place APP SCREEN X Y     where a board sits on the canvas
 pin reply ID TEXT [--as NAME]
 pin resolve ID
 pin reopen ID
@@ -145,6 +146,10 @@ do {
         need(3)
         if let kind, Kind(rawValue: kind) == nil { fail("Kind is iphone, mac or web") }
         try addVersion(store, args[0], args[1], URL(fileURLWithPath: args[2]), kind: kind.flatMap(Kind.init(rawValue:)), note: note, source: source)
+    case "place":
+        need(4)
+        guard let x = Double(args[2]), let y = Double(args[3]) else { fail("X and Y are numbers") }
+        try store.setPosition(app: args[0], screen: Store.slug(args[1]), x: x, y: y)
     case "flow":
         let label = option("--label")
         need(3)
