@@ -176,6 +176,11 @@ struct CanvasEvents: NSViewRepresentable {
             }
         }
 
+        // Holding the scroll wheel in moves the canvas, in either tool (Damian, 1 Nov 2026).
+        override func otherMouseDragged(with event: NSEvent) {
+            MainActor.assumeIsolated { model?.pan(event.deltaX, event.deltaY) }
+        }
+
         override func mouseUp(with event: NSEvent) {
             if !dragged { MainActor.assumeIsolated { model?.click(at: here(event)) } }
             pressed = nil
