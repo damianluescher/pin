@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Nothing leaves this page. Classic script, not a module: modules do not load from file: addresses. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data: blob:; font-src 'self' file:; frame-src 'self' about: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'" />
+    <title>Foundable</title>
+    <link rel="stylesheet" href="./assets/app.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script defer src="./app.js"></script>
+  </body>
+</html>

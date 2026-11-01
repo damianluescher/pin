@@ -1,0 +1,5 @@
+{
+ "mac-overview": "s=overview", "mac-have": "s=have", "mac-bills": "s=bills", "mac-coming-back": "s=earning&v=back", "mac-sell": "s=earning&v=sell", "mac-earnings": "s=earning&v=could",
+ "iphone-overview": "s=overview", "iphone-have": "s=have", "iphone-bills": "s=bills", "iphone-coming-back": "s=earning&v=back", "iphone-sell": "s=earning&v=sell", "iphone-earnings": "s=earning&v=could",
+ "iphone-edit": "s=bills&open=edit", "iphone-reorder": "s=bills&open=reorder"
+}

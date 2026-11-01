@@ -1,0 +1,22 @@
+{
+ "mac-home":"real-home","mac-home-new-account":"fresh-home","mac-home-needs-your-ok":"real-home-ok","mac-home-nothing-needs-your-ok":"fresh-home-ok","mac-home-activity-folded":"real-home-folded",
+ "mac-notifications":"real-notifications","mac-foundable-menu":"real-foundable-menu","mac-account-menu":"real-account-menu",
+ "iphone-home":"real-chat-hidden","iphone-more-menu":"real-more","iphone-home-new-account":"fresh-home","iphone-notifications":"real-notifications",
+ "mac-chat-history-open":"real-chat-history","mac-another-chat":"real-chat-other","mac-scrolled-up-jump-to-latest":"real-chat-scrolled","mac-chat-actions":"real-chat-menu","mac-renaming-the-chat":"real-chat-rename",
+ "mac-reasoning-menu":"real-chat-reasoning","mac-add-menu":"real-chat-add","mac-chat-folded-to-the-rail":"real-chat-hidden","mac-error-and-stopped-build":"states-home","mac-delete-chat":"real-d:delete-chat/c-first","mac-all-history":"real-d:history","mac-not-helpful":"real-d:feedback",
+ "iphone-chat":"real-home","iphone-chat-history":"real-chat-history","iphone-reasoning-menu":"real-chat-reasoning","iphone-error-and-stopped-build":"states-home",
+ "mac-build-canvas":"real-r:/build","mac-build-no-website-yet":"fresh-r:/build","mac-website-editor":"real-r:/build/site","mac-website-editor-phone-view":"real-site-phone","mac-website-editor-no-website-yet":"fresh-r:/build/site","mac-references":"real-d:references","mac-publish-not-available-locally":"real-d:not-local/publish",
+ "iphone-build":"real-r:/build","iphone-website-editor":"real-r:/build/site","iphone-build-no-website-yet":"fresh-r:/build",
+ "mac-payments":"real-r:/build/tools/payments","mac-database":"real-r:/build/tools/database","mac-security":"real-r:/build/tools/security","mac-security-no-website-yet":"fresh-r:/build/tools/security","mac-github":"real-r:/build/tools/github","mac-ai":"real-r:/build/tools/ai","mac-emails":"real-r:/build/tools/emails","mac-emails-new-account":"fresh-r:/build/tools/emails",
+ "iphone-payments":"real-r:/build/tools/payments","iphone-security":"real-r:/build/tools/security",
+ "mac-run":"real-r:/run","mac-run-new-account":"fresh-r:/run","mac-library":"real-run-library","mac-social-not-available-locally":"real-d:not-local/instagram","iphone-run":"real-r:/run","iphone-library":"real-run-library",
+ "mac-inbox":"real-r:/inbox","mac-reading-a-draft":"real-inbox-reading","mac-drafts":"real-inbox-drafts","mac-sent-empty":"real-inbox-sent","mac-archived-empty":"real-inbox-archived","mac-social":"real-inbox-social","mac-inbox-new-account":"fresh-r:/inbox","mac-new-email":"real-d:compose",
+ "iphone-inbox":"real-r:/inbox","iphone-reading-a-draft":"real-inbox-reading",
+ "mac-month":"states-r:/schedule","mac-week":"states-schedule-week","mac-day":"states-schedule-day","mac-year":"real-schedule-year","mac-all-tasks":"states-schedule-list","mac-all-tasks-empty":"real-schedule-list","mac-month-no-tasks":"real-r:/schedule","mac-new-task":"real-d:new-task","mac-new-task-on-a-day":"states-new-task-day",
+ "iphone-month":"states-r:/schedule","iphone-all-tasks":"states-schedule-list",
+ "mac-account":"real-d:settings/account","mac-general":"real-d:settings/general","mac-general-lower-part":"real-general-bottom","mac-team":"real-d:settings/team","mac-integrations":"real-d:settings/integrations","mac-git":"real-d:settings/git","mac-domains":"real-d:settings/domains","mac-domains-search-results":"real-domains-search","mac-all-domains":"real-d:settings/all-domains","settings-mac-notifications":"real-d:settings/notifications","mac-privacy-security":"real-d:settings/privacy","mac-delete-foundable":"real-d:delete-foundable","mac-app-not-available-locally":"real-d:not-local/Gmail",
+ "iphone-settings":"real-d:settings/general","iphone-account":"real-d:settings/account",
+ "mac-from-ted-all":"real-d:from-ted","mac-from-ted-empty":"fresh-d:from-ted","mac-business-plan":"real-i:i-plan","mac-document":"real-i:i-doc","mac-spreadsheet":"real-i:i-sheet","mac-email-draft-to-approve":"real-i:i-mail","mac-business-email":"real-i:i-bmail",
+ "iphone-business-plan":"real-i:i-plan","iphone-email-draft-to-approve":"real-i:i-mail",
+ "mac-search":"real-d:search","mac-search-typing":"real-search-typed","mac-help":"real-d:support","mac-text-ted":"real-d:text-ted","iphone-search":"real-d:search","iphone-help":"real-d:support"
+}
