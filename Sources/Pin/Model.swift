@@ -278,7 +278,7 @@ struct Draft: Equatable {
     func zoom(by factor: CGFloat, at point: CGPoint? = nil) {
         keepFitted = false
         let anchor = point ?? CGPoint(x: viewport.width / 2, y: viewport.height / 2)
-        let next = min(max(scale * factor, 0.05), 8)
+        let next = min(max(scale * factor, 0.05), 3)  // Pictures, not layers: past 300% they only turn to blocks.
         let change = next / scale
         origin = CGPoint(x: anchor.x - (anchor.x - origin.x) * change, y: anchor.y - (anchor.y - origin.y) * change)
         scale = next
