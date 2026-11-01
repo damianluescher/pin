@@ -252,7 +252,7 @@ struct LiveHost: NSViewRepresentable {
 enum WebBoards {
     /// Pages are whole browsers: more than this at once and the canvas stops being smooth.
     static let runningCap = 6
-    static let keptCap = 4
+    static let keptCap = 8
     private static var runningNow: Set<String> = []
     private static var kept: [(key: String, view: WebBoardView)] = []
 
@@ -288,16 +288,20 @@ struct WebHost: NSViewRepresentable {
     func updateNSView(_ view: WebBoardView, context: Context) { view.show(design: design, zoom: zoom) }
 }
 
-/// A web page at its design size. WebKit draws sharp only when it knows the zoom, so at rest the web view is the board's
-/// full size with its page zoom set to match: the page keeps its layout width and draws every pixel. While the zoom is
-/// still changing the old drawing is stretched through the bounds, since laying the page out on each step is too slow.
+/// A web page at its design size. WebKit draws sharp only when it knows the zoom, but laying a page out again is slow and
+/// blanks it, so it is drawn at a few fixed sizes (1x, 2x, 4x, 8x) and every zoom in between is the nearest larger drawing
+/// stretched through the bounds. Crossing a size is the only slow step, and a snapshot covers the page while it happens.
+/// WKWebView's own magnification does not work here: the page just lays out wider. Web pages draw only in a real app
+/// bundle, so check this from a bundle, not the bare build.
 final class WebBoardView: NSView, PressableBoard, WKNavigationDelegate {
     private let key: String
     private let page: WebBoard
     private let web: WKWebView
     private var design: CGSize
     private var zoom: CGFloat
+    private var drawnAt: CGFloat
     private var settling: DispatchWorkItem?
+    private var cover: NSImageView?
     private var retry: DispatchWorkItem?
     private var routing = false
     private var editing = false
@@ -332,12 +336,15 @@ final class WebBoardView: NSView, PressableBoard, WKNavigationDelegate {
         let focus = Focus()
         config.userContentController.add(focus, name: "pinFocus")
         config.userContentController.addUserScript(WKUserScript(source: Self.focusScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        web = WKWebView(frame: CGRect(x: 0, y: 0, width: design.width * zoom, height: design.height * zoom), configuration: config)
-        super.init(frame: web.frame)
+        let level = Self.level(for: zoom)
+        drawnAt = level
+        web = WKWebView(frame: CGRect(x: 0, y: 0, width: design.width * level, height: design.height * level), configuration: config)
+        super.init(frame: CGRect(x: 0, y: 0, width: design.width * zoom, height: design.height * zoom))
+        setBoundsSize(web.frame.size)
         focus.board = self
         wantsLayer = true
         web.navigationDelegate = self
-        web.pageZoom = zoom
+        web.pageZoom = level
         // The picture under it shows until the page has really loaded, so an unreachable page simply stays a picture.
         web.alphaValue = 0
         addSubview(web)
@@ -362,22 +369,50 @@ final class WebBoardView: NSView, PressableBoard, WKNavigationDelegate {
 
     func isTyping(_ responder: NSResponder?) -> Bool { editing }
 
+    private static func level(for zoom: CGFloat) -> CGFloat { [1, 2, 4, 8].first { $0 >= zoom } ?? 8 }
+
     func show(design: CGSize, zoom: CGFloat) {
         guard design != self.design || zoom != self.zoom else { return }
+        let resized = design != self.design
         self.design = design
         self.zoom = zoom
         frame.size = CGSize(width: design.width * zoom, height: design.height * zoom)
-        // Until the zoom settles, the web view keeps its size and the bounds stretch it to fit.
         setBoundsSize(web.frame.size)
         settling?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.setBoundsSize(self.frame.size)
-            self.web.frame = self.bounds
-            self.web.pageZoom = self.zoom
-        }
+        guard resized || Self.level(for: zoom) != drawnAt else { return }
+        let work = DispatchWorkItem { [weak self] in self?.redraw() }
         settling = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+    }
+
+    /// Lays the page out at the size the zoom needs, showing a snapshot of the old drawing until the new one is up.
+    private func redraw() {
+        let shot = WKSnapshotConfiguration()
+        shot.snapshotWidth = NSNumber(value: Double(min(web.frame.width, 2880)))
+        web.takeSnapshot(with: shot) { [weak self] image, _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let level = Self.level(for: self.zoom)
+                let size = CGSize(width: self.design.width * level, height: self.design.height * level)
+                self.cover?.removeFromSuperview()
+                self.cover = nil
+                if let image {
+                    let cover = NSImageView(image: image)
+                    cover.imageScaling = .scaleAxesIndependently
+                    cover.frame = CGRect(origin: .zero, size: size)
+                    self.addSubview(cover)
+                    self.cover = cover
+                }
+                self.drawnAt = level
+                self.web.frame = CGRect(origin: .zero, size: size)
+                self.web.pageZoom = level
+                self.setBoundsSize(size)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self, cover = self.cover] in
+                    cover?.removeFromSuperview()
+                    if let self, self.cover === cover { self.cover = nil }
+                }
+            }
+        }
     }
 
     override func viewDidMoveToWindow() {
@@ -412,6 +447,8 @@ final class WebBoardView: NSView, PressableBoard, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         loaded = true
         web.alphaValue = 1
+        // Coming back into view should not mean loading the page again.
+        WebBoards.keep(self, key: key)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed() }
