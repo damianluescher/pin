@@ -1,0 +1,1 @@
+/Users/damian/tools/noop2/Strand/BLE/WhoopModel.swift

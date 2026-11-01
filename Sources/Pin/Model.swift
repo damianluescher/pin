@@ -192,6 +192,7 @@ struct Draft: Equatable {
     /// The picture's real size in points: iPhone pictures come at three times, the others at two.
     private func size(of screen: Screen, _ version: Version) -> CGSize {
         guard let app else { return CGSize(width: 400, height: 300) }
+        if let live = LiveBoards.size(app: app, screen: screen.id, store: store) { return live }
         let url = store.picture(app: app, screen: screen.id, version: version)
         if let known = Self.pixels[url.path] { return scaled(known, screen) }
         guard let pixels = Store.pictureSize(url) else { return CGSize(width: 400, height: 300) }
@@ -278,7 +279,7 @@ struct Draft: Equatable {
     func zoom(by factor: CGFloat, at point: CGPoint? = nil) {
         keepFitted = false
         let anchor = point ?? CGPoint(x: viewport.width / 2, y: viewport.height / 2)
-        let next = min(max(scale * factor, 0.05), 3)  // Pictures, not layers: past 300% they only turn to blocks.
+        let next = min(max(scale * factor, 0.05), 16)
         let change = next / scale
         origin = CGPoint(x: anchor.x - (anchor.x - origin.x) * change, y: anchor.y - (anchor.y - origin.y) * change)
         scale = next

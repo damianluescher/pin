@@ -71,6 +71,17 @@ public struct FlowEdge: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+/// An app whose boards run live: the library built from its code, its screens' size, and board id -> screen name.
+public struct LiveConfig: Codable, Equatable, Sendable {
+    public struct Size: Codable, Equatable, Sendable {
+        public var width: Double
+        public var height: Double
+    }
+    public var library: String
+    public var size: Size
+    public var boards: [String: String]
+}
+
 public enum PinError: LocalizedError, Equatable {
     case notFound(String)
     case invalid(String)
@@ -229,6 +240,14 @@ public struct Store: Sendable {
 
     public func removeFlow(app: String, from: String, to: String) throws {
         try write(try flows(app: app).filter { !($0.from == from && $0.to == to) }, to: flowsURL(app))
+    }
+
+    // MARK: Live boards
+
+    public func live(app: String) -> LiveConfig? {
+        let url = appURL(app).appendingPathComponent("live.json")
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? Self.decoder.decode(LiveConfig.self, from: data)
     }
 
     // MARK: Where boards sit

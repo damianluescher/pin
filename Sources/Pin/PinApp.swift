@@ -20,7 +20,19 @@ struct PinApp: App {
                     model.start()
                                         if let out = ProcessInfo.processInfo.environment["PIN_SHOT"] {
                         // A picture of the whole real window with its toolbar, for checking the look.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                        let env = ProcessInfo.processInfo.environment
+                        // For checking: open a page and zoom first, e.g. PIN_PAGE=Screens PIN_ZOOM=8.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                            if let page = env["PIN_PAGE"] { model.choose(page: page) }
+                            if let zoom = env["PIN_ZOOM"].flatMap(Double.init) {
+                                model.zoom(by: zoom / model.scale, at: .zero)
+                                // PIN_X and PIN_Y are measured from the first board's corner, in screen points.
+                                let corner = model.placed.first?.rect.origin ?? .zero
+                                model.origin = CGPoint(x: (env["PIN_X"].flatMap(Double.init) ?? 0) - corner.x * zoom,
+                                                       y: (env["PIN_Y"].flatMap(Double.init) ?? 0) - corner.y * zoom)
+                            }
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
                             guard let frame = NSApp.windows.first(where: { $0.isVisible })?.contentView?.superview,
                                   let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else { return }
                             frame.cacheDisplay(in: frame.bounds, to: rep)
