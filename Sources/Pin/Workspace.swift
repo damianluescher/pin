@@ -15,9 +15,6 @@ struct Canvas: View {
                 bubble(in: box.size)
             }
             .clipped()
-            .onAppear { model.sized(box.size) }
-            .onChange(of: box.size) { _, new in model.sized(new) }
-            .onChange(of: model.app) { model.sized(box.size) }
         }
     }
 
@@ -133,6 +130,13 @@ struct CanvasEvents: NSViewRepresentable {
         private var dragged = false
 
         override var isFlipped: Bool { true }
+        /// The real size of the canvas, from the view that fills it.
+        override func setFrameSize(_ size: NSSize) {
+            super.setFrameSize(size)
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated { self?.model?.sized(size) }
+            }
+        }
         override var acceptsFirstResponder: Bool { true }
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
         override func resetCursorRects() { addCursorRect(bounds, cursor: tool == .comment ? .crosshair : .openHand) }
