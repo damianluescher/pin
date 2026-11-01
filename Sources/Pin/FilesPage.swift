@@ -10,6 +10,10 @@ struct FilesPage: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Pin").font(Style.strong).foregroundStyle(Style.ink).padding(.horizontal, 10).padding(.bottom, Style.gap)
                 Button {} label: { Label("Files", systemImage: "square.grid.2x2") }.buttonStyle(SideRow(chosen: true))
+                Text("Recent").font(Style.small.weight(.semibold)).foregroundStyle(Style.grey).padding(.horizontal, 10).padding(.top, Style.gap).padding(.bottom, 4)
+                ForEach(model.apps, id: \.self) { name in
+                    Button { model.open(name) } label: { Text(name).lineLimit(1) }.buttonStyle(SideRow())
+                }
                 Spacer()
             }
             .padding(.horizontal, 10)
@@ -59,9 +63,9 @@ struct FileCard: View {
                     }
                     .padding(14)
                 }
-                .frame(height: 170)
+                .frame(height: 190)
                 .clipShape(RoundedRectangle(cornerRadius: Style.corner))
-                .overlay(RoundedRectangle(cornerRadius: Style.corner).strokeBorder(hovering ? Color.white.opacity(0.35) : Style.line))
+                .overlay(RoundedRectangle(cornerRadius: Style.corner).strokeBorder(hovering ? Color.white.opacity(0.35) : .clear))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(name).font(Style.strong).foregroundStyle(Style.ink)
                     Text(open > 0 ? "\(screens.count) boards · \(open) open" : "\(screens.count) boards").font(Style.small).foregroundStyle(Style.grey)

@@ -4,9 +4,9 @@ import SwiftUI
 /// Pin's one scale. Nothing outside this file picks a size, a gap or a colour.
 enum Style {
     static let title = Font.system(size: 22, weight: .semibold)
-    static let body = Font.system(size: 13)
-    static let strong = Font.system(size: 13, weight: .semibold)
-    static let small = Font.system(size: 11)
+    static let body = Font.system(size: 15)
+    static let strong = Font.system(size: 15, weight: .semibold)
+    static let small = Font.system(size: 13)
 
     static let edge: CGFloat = 24
     static let gap: CGFloat = 16
@@ -32,10 +32,9 @@ struct PinDot: View {
         Text("\(number)")
             .font(.system(size: 12, weight: .semibold))
             .monospacedDigit()
-            .foregroundStyle(chosen ? .black : .white)
+            .foregroundStyle(.black)
             .frame(width: 26, height: 26)
-            .background(Circle().fill(chosen ? Style.accent : Color(white: 0.16)))
-            .overlay(Circle().strokeBorder(.white, lineWidth: 1.5))
+            .background(Circle().fill(chosen ? Style.accent : .white))
             .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
     }
 }
@@ -59,7 +58,7 @@ struct PlainPill: ButtonStyle {
             .font(Style.body.weight(.medium))
             .foregroundStyle(on ? .black : Style.ink)
             .padding(.horizontal, 12)
-            .frame(height: 28)
+            .frame(height: 30)
             .background(Capsule().fill(on ? Color.white : Style.raised))
             .opacity(configuration.isPressed ? 0.7 : 1)
             .contentShape(Capsule())
@@ -74,7 +73,7 @@ struct SideRow: ButtonStyle {
             .font(Style.body)
             .foregroundStyle(Style.ink)
             .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 6).fill(chosen || configuration.isPressed ? Style.chosen : .clear))
             .contentShape(Rectangle())
     }
@@ -82,6 +81,7 @@ struct SideRow: ButtonStyle {
 
 extension Date {
     var short: String {
+        if abs(timeIntervalSinceNow) < 60 { return "now" }
         let f = RelativeDateTimeFormatter()
         f.unitsStyle = .abbreviated
         return f.localizedString(for: self, relativeTo: Date())

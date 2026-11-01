@@ -172,13 +172,12 @@ struct Canvas: View {
             }
             .padding(4)
             .background(Capsule().fill(Style.side))
-            .overlay(Capsule().strokeBorder(Style.line))
             Spacer()
         }
         .overlay(alignment: .trailing) {
             HStack(spacing: 2) {
                 Button { model.zoom(by: 0.8) } label: { Image(systemName: "minus").frame(width: 24, height: 24).contentShape(Rectangle()) }
-                Button { model.fit() } label: { Text("\(Int(model.scale * 100))%").font(Style.small).monospacedDigit().frame(width: 40, height: 24).contentShape(Rectangle()) }.help("Fit page")
+                Button { model.fit() } label: { Text("\(Int(model.scale * 100))%").font(Style.small).monospacedDigit().frame(width: 46, height: 24).contentShape(Rectangle()) }.help("Fit page")
                 Button { model.zoom(by: 1.25) } label: { Image(systemName: "plus").frame(width: 24, height: 24).contentShape(Rectangle()) }
             }
             .buttonStyle(.plain)
@@ -186,7 +185,6 @@ struct Canvas: View {
             .font(.system(size: 11, weight: .semibold))
             .padding(4)
             .background(Capsule().fill(Style.side))
-            .overlay(Capsule().strokeBorder(Style.line))
             .padding(.trailing, 12)
         }
         .padding(.top, 12)
@@ -318,7 +316,6 @@ struct NewComment: View {
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: Style.corner).fill(Style.bubble))
-        .overlay(RoundedRectangle(cornerRadius: Style.corner).strokeBorder(Style.line))
         .shadow(color: .black.opacity(0.5), radius: 16, y: 6)
         .onAppear { writing = true }
     }
@@ -385,7 +382,6 @@ struct ThreadBubble: View {
                 .onExitCommand { model.selected = nil }
         }
         .background(RoundedRectangle(cornerRadius: Style.corner).fill(Style.bubble))
-        .overlay(RoundedRectangle(cornerRadius: Style.corner).strokeBorder(Style.line))
         .shadow(color: .black.opacity(0.5), radius: 16, y: 6)
         .onAppear { writing = true }
     }
