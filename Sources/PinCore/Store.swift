@@ -59,6 +59,18 @@ public struct PinThread: Codable, Equatable, Identifiable, Sendable {
     public var messages: [Message]
 }
 
+/// One step of a flow: tapping something on one board leads to another.
+public struct FlowEdge: Codable, Equatable, Hashable, Sendable {
+    public var from: String
+    public var to: String
+    public var label: String?
+    public init(from: String, to: String, label: String? = nil) {
+        self.from = from
+        self.to = to
+        self.label = label
+    }
+}
+
 public enum PinError: LocalizedError, Equatable {
     case notFound(String)
     case invalid(String)
@@ -195,6 +207,28 @@ public struct Store: Sendable {
     public func delete(thread id: String) throws {
         let found = try thread(id: id)
         try FileManager.default.removeItem(at: threadURL(found))
+    }
+
+    // MARK: Flows
+
+    private func flowsURL(_ app: String) -> URL { appURL(app).appendingPathComponent("flows.json") }
+
+    public func flows(app: String) throws -> [FlowEdge] {
+        let url = flowsURL(app)
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        return try Self.decoder.decode([FlowEdge].self, from: Data(contentsOf: url))
+    }
+
+    public func addFlow(app: String, from: String, to: String, label: String? = nil) throws {
+        let start = try screen(app: app, id: from), end = try screen(app: app, id: to)
+        guard start.id != end.id else { throw PinError.invalid("A flow step goes to another board") }
+        var list = try flows(app: app).filter { !($0.from == from && $0.to == to) }
+        list.append(FlowEdge(from: from, to: to, label: label))
+        try write(list, to: flowsURL(app))
+    }
+
+    public func removeFlow(app: String, from: String, to: String) throws {
+        try write(try flows(app: app).filter { !($0.from == from && $0.to == to) }, to: flowsURL(app))
     }
 
     // MARK: Helpers

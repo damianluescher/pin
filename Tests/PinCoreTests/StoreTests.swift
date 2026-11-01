@@ -48,6 +48,18 @@ final class StoreTests: XCTestCase {
         XCTAssertThrowsError(try store.addThread(app: "10", screen: "today", version: 1, x: 0, y: 0, text: "  ", author: "D"))
     }
 
+    func testFlowsNeedRealBoardsAndDoNotRepeat() throws {
+        try store.addVersion(app: "10", name: "Today", picture: picture)
+        try store.addVersion(app: "10", name: "Train", picture: picture)
+        try store.addFlow(app: "10", from: "today", to: "train", label: "Arrow")
+        try store.addFlow(app: "10", from: "today", to: "train", label: "Next")
+        XCTAssertEqual(try store.flows(app: "10"), [FlowEdge(from: "today", to: "train", label: "Next")])
+        XCTAssertThrowsError(try store.addFlow(app: "10", from: "today", to: "nope"))
+        XCTAssertThrowsError(try store.addFlow(app: "10", from: "today", to: "today"))
+        try store.removeFlow(app: "10", from: "today", to: "train")
+        XCTAssertEqual(try store.flows(app: "10"), [])
+    }
+
     func testSlug() {
         XCTAssertEqual(Store.slug("Today · Good"), "today-good")
     }

@@ -7,6 +7,9 @@ pin apps
 pin screens APP
 pin comments [APP [SCREEN]] [--all] [--json]     open comments, with where they sit and the picture's path
 pin add APP SCREEN PICTURE [--kind iphone|mac|web] [--page NAME] [--note TEXT] [--source PATH]     next version of a screen
+pin flow APP FROM TO [--label TEXT]     an arrow between two boards
+pin unflow APP FROM TO
+pin flows APP
 pin reply ID TEXT [--as NAME]
 pin resolve ID
 pin reopen ID
@@ -142,6 +145,16 @@ do {
         need(3)
         if let kind, Kind(rawValue: kind) == nil { fail("Kind is iphone, mac or web") }
         try addVersion(store, args[0], args[1], URL(fileURLWithPath: args[2]), kind: kind.flatMap(Kind.init(rawValue:)), note: note, source: source)
+    case "flow":
+        let label = option("--label")
+        need(3)
+        try store.addFlow(app: args[0], from: Store.slug(args[1]), to: Store.slug(args[2]), label: label)
+    case "unflow":
+        need(3)
+        try store.removeFlow(app: args[0], from: Store.slug(args[1]), to: Store.slug(args[2]))
+    case "flows":
+        need(1)
+        for f in try store.flows(app: args[0]) { print("\(f.from) -> \(f.to)\(f.label.map { "  \($0)" } ?? "")") }
     case "reply":
         let author = option("--as") ?? "Claude"
         need(2)

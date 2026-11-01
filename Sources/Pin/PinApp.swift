@@ -42,6 +42,7 @@ struct PinApp: App {
                 Divider()
                 Toggle("Show Resolved Comments", isOn: $model.showResolved)
                 Toggle("Show All Versions", isOn: $model.showAllVersions)
+                Toggle("Show Flows", isOn: $model.showFlows)
             }
             CommandMenu("Tools") {
                 Button("Comment (C)") { model.tool = .comment }

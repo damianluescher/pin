@@ -9,12 +9,69 @@ struct Canvas: View {
         GeometryReader { box in
             ZStack(alignment: .topLeading) {
                 Style.canvas
+                dots(in: box.size).allowsHitTesting(false)
                 CanvasEvents()
                 boards(in: box.size).allowsHitTesting(false)
+                flowArrows.allowsHitTesting(false)
                 pins.allowsHitTesting(false)
                 bubble(in: box.size)
             }
             .clipped()
+        }
+    }
+
+    /// The board's dots. They move and zoom with the canvas; zoomed far out only every other row and column stays.
+    private func dots(in size: CGSize) -> some View {
+        let scale = model.scale, origin = model.origin
+        return SwiftUI.Canvas { context, _ in
+            var step: CGFloat = 40 * scale
+            while step < 14 { step *= 2 }
+            let radius: CGFloat = 1.1
+            var x = origin.x.truncatingRemainder(dividingBy: step)
+            if x < 0 { x += step }
+            var dots = Path()
+            while x < size.width {
+                var y = origin.y.truncatingRemainder(dividingBy: step)
+                if y < 0 { y += step }
+                while y < size.height {
+                    dots.addEllipse(in: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2))
+                    y += step
+                }
+                x += step
+            }
+            context.fill(dots, with: .color(.white.opacity(0.17)))
+        }
+    }
+
+    /// The flow: a curved arrow from each board to the one it leads to, with what you tap on it.
+    private var flowArrows: some View {
+        let lines = model.flowLines.map { (model.onScreen($0.from), model.onScreen($0.to), $0.label) }
+        return SwiftUI.Canvas { context, _ in
+            let ink = Color.white.opacity(0.6)
+            for (start, end, label) in lines {
+                let pull = max(abs(end.x - start.x) / 2, 40)
+                let tip = CGPoint(x: end.x - 2, y: end.y)
+                var line = Path()
+                line.move(to: start)
+                line.addCurve(to: CGPoint(x: tip.x - 6, y: tip.y),
+                              control1: CGPoint(x: start.x + pull, y: start.y),
+                              control2: CGPoint(x: tip.x - pull, y: tip.y))
+                context.stroke(line, with: .color(ink), lineWidth: 1.5)
+                var head = Path()
+                head.move(to: tip)
+                head.addLine(to: CGPoint(x: tip.x - 9, y: tip.y - 5))
+                head.addLine(to: CGPoint(x: tip.x - 9, y: tip.y + 5))
+                head.closeSubpath()
+                context.fill(head, with: .color(ink))
+                if let label {
+                    let text = context.resolve(Text(label).font(Style.small).foregroundColor(Style.ink))
+                    let middle = CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
+                    let size = text.measure(in: CGSize(width: 220, height: 40))
+                    let plate = CGRect(x: middle.x - size.width / 2 - 6, y: middle.y - size.height / 2 - 3, width: size.width + 12, height: size.height + 6)
+                    context.fill(Path(roundedRect: plate, cornerRadius: 6), with: .color(Style.raised))
+                    context.draw(text, at: middle)
+                }
+            }
         }
     }
 

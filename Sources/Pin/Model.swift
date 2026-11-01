@@ -27,6 +27,8 @@ struct Draft: Equatable {
     var app: String?
     var screens: [Screen] = []
     var threads: [String: [PinThread]] = [:]
+    var flows: [FlowEdge] = []
+    var showFlows = true
     var failure: String?
 
     var page: String?
@@ -66,6 +68,8 @@ struct Draft: Equatable {
             var next: [String: [PinThread]] = [:]
             for screen in list { next[screen.id] = try store.threads(app: app, screen: screen.id) }
             if next != threads { threads = next }
+            let steps = try store.flows(app: app)
+            if steps != flows { flows = steps }
             if page == nil || !pages.contains(page ?? "") { page = pages.first }
             failure = nil
         } catch {
@@ -100,38 +104,86 @@ struct Draft: Equatable {
 
     var pageScreens: [Screen] { screens.filter { $0.pageName == page } }
 
-    /// Boards left to right in rows, each with the version before it on its left, as on a design canvas.
+    /// Boards as a flow when the page has one: each step one column further right, branches stacked.
+    /// Boards with no step, and pages with none, run left to right in rows. A board's previous version sits on its left.
     var placed: [Placed] {
+        let screens = pageScreens
+        let ids = Set(screens.map(\.id))
+        let steps = flows.filter { ids.contains($0.from) && ids.contains($0.to) }
+        let linked = Set(steps.flatMap { [$0.from, $0.to] })
+        let gap: CGFloat = 80
         var out: [Placed] = []
-        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
-        let gap: CGFloat = 80, limit: CGFloat = 3600
-        for screen in pageScreens {
-            let versions = showAllVersions ? screen.versions : Array(screen.versions.suffix(2))
-            var block: [(Version, CGSize)] = []
-            for version in versions { block.append((version, size(of: screen, version))) }
-            let width = block.map(\.1.width).reduce(0, +) + gap * CGFloat(max(block.count - 1, 0))
-            if x > 0, x + width > limit {
-                x = 0
+        var x: CGFloat = 0
+        if !steps.isEmpty {
+            var depth: [String: Int] = [:]
+            // Longest way from a start; the fixed number of rounds also ends any loop.
+            for _ in screens {
+                for step in steps { depth[step.to] = max(depth[step.to] ?? 0, (depth[step.from] ?? 0) + 1) }
+            }
+            for column in Set(linked.map { depth[$0] ?? 0 }).sorted() {
+                var y: CGFloat = 0, width: CGFloat = 0
+                for screen in screens where linked.contains(screen.id) && (depth[screen.id] ?? 0) == column {
+                    let (items, size) = block(screen, at: CGPoint(x: x, y: y), gap: gap)
+                    out += items
+                    y += size.height + gap
+                    width = max(width, size.width)
+                }
+                x += width + gap * 2.5
+            }
+        }
+        let origin = x
+        var y: CGFloat = 0, rowHeight: CGFloat = 0
+        for screen in screens where !linked.contains(screen.id) {
+            let width = block(screen, at: .zero, gap: gap).1.width
+            if x > origin, x + width > origin + 3600 {
+                x = origin
                 y += rowHeight + gap * 1.5
                 rowHeight = 0
             }
-            for (version, size) in block {
-                out.append(Placed(screen: screen, version: version, rect: CGRect(origin: CGPoint(x: x, y: y), size: size)))
-                x += size.width + gap
-                rowHeight = max(rowHeight, size.height)
-            }
-            x += gap * 0.5
+            let (items, size) = block(screen, at: CGPoint(x: x, y: y), gap: gap)
+            out += items
+            x += size.width + gap * 1.5
+            rowHeight = max(rowHeight, size.height)
         }
         return out
     }
 
+    private func block(_ screen: Screen, at corner: CGPoint, gap: CGFloat) -> ([Placed], CGSize) {
+        var x = corner.x, height: CGFloat = 0
+        var items: [Placed] = []
+        for version in showAllVersions ? screen.versions : Array(screen.versions.suffix(2)) {
+            let size = size(of: screen, version)
+            items.append(Placed(screen: screen, version: version, rect: CGRect(origin: CGPoint(x: x, y: corner.y), size: size)))
+            x += size.width + gap
+            height = max(height, size.height)
+        }
+        return (items, CGSize(width: max(x - gap - corner.x, 0), height: height))
+    }
+
     /// The picture's real size in points: iPhone pictures come at three times, the others at two.
     private func size(of screen: Screen, _ version: Version) -> CGSize {
-        guard let app, let pixels = Store.pictureSize(store.picture(app: app, screen: screen.id, version: version)) else {
-            return CGSize(width: 400, height: 300)
-        }
+        guard let app else { return CGSize(width: 400, height: 300) }
+        let url = store.picture(app: app, screen: screen.id, version: version)
+        if let known = Self.pixels[url.path] { return scaled(known, screen) }
+        guard let pixels = Store.pictureSize(url) else { return CGSize(width: 400, height: 300) }
+        Self.pixels[url.path] = pixels
+        return scaled(pixels, screen)
+    }
+
+    private func scaled(_ pixels: CGSize, _ screen: Screen) -> CGSize {
         let factor: CGFloat = screen.kind == .iphone ? 3 : 2
         return CGSize(width: pixels.width / factor, height: pixels.height / factor)
+    }
+
+    /// The arrows of the open page, in canvas units.
+    var flowLines: [(from: CGPoint, to: CGPoint, label: String?)] {
+        guard showFlows else { return [] }
+        let boxes = placed
+        return flows.compactMap { step in
+            guard let start = boxes.last(where: { $0.screen.id == step.from }),
+                  let end = boxes.first(where: { $0.screen.id == step.to }) else { return nil }
+            return (CGPoint(x: start.rect.maxX, y: start.rect.midY), CGPoint(x: end.rect.minX, y: end.rect.midY), step.label)
+        }
     }
 
     func threads(on placed: Placed) -> [PinThread] {
@@ -270,4 +322,6 @@ struct Draft: Equatable {
     }
 
     private static let cache = NSCache<NSString, NSImage>()
+    /// Reading a picture's size from disk on every frame of a drag is too slow.
+    private static var pixels: [String: CGSize] = [:]
 }
