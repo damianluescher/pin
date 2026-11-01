@@ -32,6 +32,10 @@ struct PinApp: App {
                                                        y: (env["PIN_Y"].flatMap(Double.init) ?? 0) - corner.y * zoom)
                             }
                         }
+                        // For measuring: PIN_BENCH=1 moves the canvas for 5 seconds and writes how smooth it was.
+                        if env["PIN_BENCH"] != nil {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { Bench.run(model) }
+                        }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
                             guard let frame = NSApp.windows.first(where: { $0.isVisible })?.contentView?.superview,
                                   let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else { return }
@@ -210,5 +214,38 @@ enum Snapshot {
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out))
+    }
+}
+
+/// Moves the canvas the way a drag does and reports the time between frames.
+@MainActor
+enum Bench {
+    private static var gaps: [Double] = []
+    private static var last = CACurrentMediaTime()
+    private static var step = 0
+
+    static func run(_ model: Model) {
+        last = CACurrentMediaTime()
+        tick(model)
+    }
+
+    private static func tick(_ model: Model) {
+        let now = CACurrentMediaTime()
+        gaps.append((now - last) * 1000)
+        last = now
+        step += 1
+        if ProcessInfo.processInfo.environment["PIN_BENCH"] == "zoom" {
+            model.zoom(by: step % 200 < 100 ? 1.02 : 0.98)
+        } else {
+            model.origin.x += sin(Double(step) / 20) * 6
+        }
+        if step < 300 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 120) { tick(model) }
+        } else {
+            let sorted = gaps.dropFirst().sorted()
+            let total = sorted.reduce(0, +)
+            print("frames per second \(Int(Double(sorted.count) / total * 1000)), typical \(Int(sorted[sorted.count / 2])) ms, worst \(Int(sorted.last ?? 0)) ms")
+            fflush(stdout)
+        }
     }
 }

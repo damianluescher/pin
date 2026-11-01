@@ -1,3 +1,4 @@
+import ImageIO
 import AppKit
 import Observation
 import PinCore
@@ -117,7 +118,21 @@ struct Draft: Equatable {
 
     /// Boards as a flow when the page has one: each step one column further right, branches stacked.
     /// Boards with no step, and pages with none, run left to right in rows. A board's previous version sits on its left.
+    /// Asked for many times per frame, so the layout is kept until something it depends on changes.
     var placed: [Placed] {
+        let key = PlacedKey(screens: screens, page: page, flows: flows, positions: positions, all: showAllVersions)
+        if let known = placedMemo, known.key == key { return known.items }
+        let items = computePlaced()
+        placedMemo = (key, items)
+        return items
+    }
+
+    private struct PlacedKey: Equatable {
+        let screens: [Screen], page: String?, flows: [FlowEdge], positions: [String: CGPoint], all: Bool
+    }
+    @ObservationIgnored private var placedMemo: (key: PlacedKey, items: [Placed])?
+
+    private func computePlaced() -> [Placed] {
         // A dragged board goes where he put it, its older version still on its left.
         autoPlaced.map { item in
             guard let spot = positions[item.screen.id],
@@ -353,12 +368,15 @@ struct Draft: Equatable {
 
     // MARK: Files
 
-    func image(_ screen: Screen, _ version: Version, app name: String? = nil) -> NSImage? {
+    /// The picture, at a lighter size while its board is small on screen: enlarging is rare, shrinking 40 full
+    /// pictures on every frame is what makes a big page lag.
+    func image(_ screen: Screen, _ version: Version, app name: String? = nil, shownAt width: CGFloat = .infinity) -> NSImage? {
         guard let name = name ?? app else { return nil }
         let url = store.picture(app: name, screen: screen.id, version: version)
-        let key = url.path as NSString
+        let light = width < Self.lightWidth / 2
+        let key = (light ? "light:" + url.path : url.path) as NSString
         if let cached = Self.cache.object(forKey: key) { return cached }
-        guard let image = NSImage(contentsOf: url) else { return nil }
+        guard let image = light ? Self.lightImage(url) : NSImage(contentsOf: url) else { return nil }
         Self.cache.setObject(image, forKey: key)
         return image
     }
@@ -375,6 +393,16 @@ struct Draft: Equatable {
             failure = error.localizedDescription
             return nil
         }
+    }
+
+    private static let lightWidth: CGFloat = 800
+
+    private static func lightImage(_ url: URL) -> NSImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return NSImage(contentsOf: url) }
+        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
+                                        kCGImageSourceShouldCacheImmediately: true, kCGImageSourceThumbnailMaxPixelSize: lightWidth * 2]
+        guard let small = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return NSImage(contentsOf: url) }
+        return NSImage(cgImage: small, size: .zero)
     }
 
     private static let cache = NSCache<NSString, NSImage>()

@@ -80,7 +80,7 @@ struct Canvas: View {
                         LiveHost(view: live, design: item.rect.size, zoom: item.rect.width > 0 ? rect.width / item.rect.width : 1)
                             .frame(width: rect.width, height: rect.height)
                             .position(x: rect.midX, y: rect.midY)
-                    } else if let image = model.image(item.screen, item.version) {
+                    } else if let image = model.image(item.screen, item.version, shownAt: rect.width) {
                         Image(nsImage: image).resizable().interpolation(.high)
                             .frame(width: rect.width, height: rect.height)
                             .position(x: rect.midX, y: rect.midY)
