@@ -26,8 +26,10 @@ struct Draft: Equatable {
     var apps: [String] = []
     /// The open file; nil shows the files page.
     var app: String?
-    var screens: [Screen] = []
-    var threads: [String: [PinThread]] = [:]
+    var screens: [Screen] = [] { didSet { sortedThreads = nil } }
+    var threads: [String: [PinThread]] = [:] { didSet { sortedThreads = nil } }
+    @ObservationIgnored private var sortedThreads: [PinThread]?
+    private var openCounts: [String: Int] = [:]
     var flows: [FlowEdge] = []
     var showFlows = true
     /// Boards he dragged somewhere; the rest keep the automatic layout.
@@ -57,36 +59,83 @@ struct Draft: Equatable {
         if app == nil, let name = [UserDefaults.standard.string(forKey: "lastFile")].compactMap({ $0 }).first(where: apps.contains) ?? apps.first { open(name) }
         guard timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reload() }
+            MainActor.assumeIsolated { self?.tick() }
         }
     }
 
+    /// Everything read from disk in one go, so reading many boards never happens on the thread that draws.
+    private struct Snapshot: Sendable {
+        var apps: [String]
+        var screens: [Screen] = []
+        var threads: [String: [PinThread]] = [:]
+        var flows: [FlowEdge] = []
+        var positions: [String: [Double]] = [:]
+        var openCounts: [String: Int]?
+        var failure: String?
+    }
+
+    private nonisolated static func read(_ store: Store, app: String?, counts: Bool) -> Snapshot {
+        var out = Snapshot(apps: store.apps())
+        if counts {
+            out.openCounts = Dictionary(uniqueKeysWithValues: out.apps.map { name in
+                (name, (try? store.allThreads(app: name).filter { !$0.resolved }.count) ?? 0)
+            })
+        }
+        guard let app else { return out }
+        do {
+            out.screens = try store.screens(app: app)
+            for screen in out.screens { out.threads[screen.id] = try store.threads(app: app, screen: screen.id) }
+            out.flows = try store.flows(app: app)
+            out.positions = try store.positions(app: app)
+        } catch {
+            out.failure = error.localizedDescription
+        }
+        return out
+    }
+
+    private var reading = false
+    private var ticks = 0
+
+    private func tick() {
+        guard !reading else { return }
+        reading = true
+        let counts = ticks % 5 == 0
+        ticks += 1
+        let store = store, wanted = app
+        Task.detached(priority: .utility) { [weak self] in
+            let found = Self.read(store, app: wanted, counts: counts)
+            await MainActor.run {
+                guard let self else { return }
+                self.reading = false
+                if self.app == wanted { self.apply(found) }
+            }
+        }
+    }
+
+    /// Right now, on this thread: for opening a file, where he should see it at once.
     func reload() {
-        let found = store.apps()
-        if found != apps { apps = found }
-        guard let app else {
-            if let first = found.first, timer != nil { open(first) }
+        apply(Self.read(store, app: app, counts: openCounts.isEmpty))
+    }
+
+    private func apply(_ found: Snapshot) {
+        if found.apps != apps { apps = found.apps }
+        if let counts = found.openCounts, counts != openCounts { openCounts = counts }
+        guard app != nil else {
+            if let first = found.apps.first, timer != nil { open(first) }
             return
         }
-        do {
-            let list = try store.screens(app: app)
-            if list != screens { screens = list }
-            var next: [String: [PinThread]] = [:]
-            for screen in list { next[screen.id] = try store.threads(app: app, screen: screen.id) }
-            if next != threads { threads = next }
-            let steps = try store.flows(app: app)
-            let flowsChanged = steps != flows
-            if flowsChanged { flows = steps }
-            if dragging == nil {
-                let saved = try store.positions(app: app).compactMapValues { $0.count == 2 ? CGPoint(x: $0[0], y: $0[1]) : nil }
-                if saved != positions { positions = saved }
-            }
-            if page == nil || !pages.contains(page ?? "") { page = pages.first }
-            if keepFitted, flowsChanged || list != lastFitted { lastFitted = list; fit() }
-            failure = nil
-        } catch {
-            failure = error.localizedDescription
+        if let problem = found.failure { failure = problem; return }
+        if found.screens != screens { screens = found.screens }
+        if found.threads != threads { threads = found.threads }
+        let flowsChanged = found.flows != flows
+        if flowsChanged { flows = found.flows }
+        if dragging == nil {
+            let saved = found.positions.compactMapValues { $0.count == 2 ? CGPoint(x: $0[0], y: $0[1]) : nil }
+            if saved != positions { positions = saved }
         }
+        if page == nil || !pages.contains(page ?? "") { page = pages.first }
+        if keepFitted, flowsChanged || found.screens != lastFitted { lastFitted = found.screens; fit() }
+        failure = nil
     }
 
     func open(_ name: String) {
@@ -266,14 +315,15 @@ struct Draft: Equatable {
     }
 
     var allThreads: [PinThread] {
-        let order = screens.map(\.id)
-        return threads.values.flatMap { $0 }
-            .sorted { ((order.firstIndex(of: $0.screen) ?? 0), $0.version, $0.created) < ((order.firstIndex(of: $1.screen) ?? 0), $1.version, $1.created) }
+        if let sortedThreads { return sortedThreads }
+        let order = Dictionary(screens.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let list = threads.values.flatMap { $0 }
+            .sorted { ((order[$0.screen] ?? 0), $0.version, $0.created) < ((order[$1.screen] ?? 0), $1.version, $1.created) }
+        sortedThreads = list
+        return list
     }
 
-    func openCount(app name: String) -> Int {
-        (try? store.allThreads(app: name).filter { !$0.resolved }.count) ?? 0
-    }
+    func openCount(app name: String) -> Int { openCounts[name] ?? 0 }
 
     // MARK: Canvas
 
@@ -380,6 +430,18 @@ struct Draft: Equatable {
         Self.cache.setObject(image, forKey: key)
         return image
     }
+
+    /// The board's vector file, when it was copied from a design file. Remembered, since this is asked on every frame.
+    func vectorFile(_ screen: Screen, _ version: Version) -> URL? {
+        guard let app else { return nil }
+        let url = store.picture(app: app, screen: screen.id, version: version).deletingPathExtension().appendingPathExtension("pdf")
+        let now = Date()
+        if let known = vectorFiles[url], now.timeIntervalSince(known.checked) < 5 { return known.there ? url : nil }
+        let there = FileManager.default.fileExists(atPath: url.path)
+        vectorFiles[url] = (now, there)
+        return there ? url : nil
+    }
+    @ObservationIgnored private var vectorFiles: [URL: (checked: Date, there: Bool)] = [:]
 
     /// Runs a change to the files, shows what went wrong if it fails, and returns what it made.
     @discardableResult

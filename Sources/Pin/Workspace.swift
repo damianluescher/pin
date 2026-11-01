@@ -72,6 +72,7 @@ struct Canvas: View {
 
     private func boards(in size: CGSize) -> some View {
         let frame = CGRect(origin: .zero, size: size)
+        let scale = model.scale
         return ZStack(alignment: .topLeading) {
             ForEach(model.placed) { item in
                 let rect = model.onScreen(item.rect)
@@ -84,6 +85,10 @@ struct Canvas: View {
                         Image(nsImage: image).resizable().interpolation(.high)
                             .frame(width: rect.width, height: rect.height)
                             .position(x: rect.midX, y: rect.midY)
+                        // Past 100% the picture runs out of detail, so the vector file takes over where there is one.
+                        if scale > 1, let file = model.vectorFile(item.screen, item.version) {
+                            VectorBoard(file: file, rect: rect, design: item.rect.size, frame: frame, zoom: scale)
+                        }
                     }
                     Text(label(item)).font(Style.small).foregroundStyle(Style.grey).lineLimit(1)
                         .frame(width: max(rect.width, 40), alignment: .leading)
