@@ -79,7 +79,11 @@ public struct LiveConfig: Codable, Equatable, Sendable {
     }
     public var library: String
     public var size: Size
+    /// A board that is not the usual size, by board id. Older files simply do not have this.
+    public var sizes: [String: Size]?
     public var boards: [String: String]
+
+    public func size(of board: String) -> Size { sizes?[board] ?? size }
 }
 
 public enum PinError: LocalizedError, Equatable {

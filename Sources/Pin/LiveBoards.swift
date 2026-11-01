@@ -15,7 +15,7 @@ enum LiveBoards {
     /// The screen's design size, or nil when this board is only a picture.
     static func size(app: String, screen: String, store: Store) -> CGSize? {
         guard let live = config(app, store), live.boards[screen] != nil else { return nil }
-        return live.size.cgSize
+        return live.size(of: screen).cgSize
     }
 
     /// This is asked for every board on every frame, so the file is read at most every couple of seconds.
@@ -40,6 +40,15 @@ enum LiveBoards {
         views[key] = view
         return view
     }
+
+    /// Whether a board on screen runs live at this width. Small boards keep their picture, so a zoomed-out page stays
+    /// light. It switches on and off at different widths, so a board at the edge cannot flip back and forth.
+    static func runs(_ key: String, shownAt width: CGFloat) -> Bool {
+        let on = running.contains(key) ? width >= 270 : width >= 300
+        if on { running.insert(key) } else { running.remove(key) }
+        return on
+    }
+    private static var running: Set<String> = []
 
     private static func library(_ path: String) -> UnsafeMutableRawPointer? {
         if let open = libraries[path] { return open }
@@ -70,6 +79,9 @@ struct LiveHost: NSViewRepresentable {
         box.wantsLayer = true
         box.addSubview(host)
         box.host = host
+        // The screen fills in its numbers just after it starts: the picture under it shows until then, so no flicker.
+        host.alphaValue = 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak host] in host?.alphaValue = 1 }
         return box
     }
 

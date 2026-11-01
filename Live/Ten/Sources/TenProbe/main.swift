@@ -24,7 +24,7 @@ MainActor.assumeIsolated {
     w.contentView = NSHostingView(rootView: Probe(scale: scale, name: name))
     w.makeKeyAndOrderFront(nil)
     if let path = ProcessInfo.processInfo.environment["PROBE_SHOT"] {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (Double(ProcessInfo.processInfo.environment["PROBE_DELAY"] ?? "") ?? 2.5)) {
             let v = w.contentView!
             let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds)!
             v.cacheDisplay(in: v.bounds, to: rep)

@@ -23,6 +23,7 @@ struct PinApp: App {
                         let env = ProcessInfo.processInfo.environment
                         // For checking: open a page and zoom first, e.g. PIN_PAGE=Screens PIN_ZOOM=8.
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                            if let app = env["PIN_APP"] { model.open(app) }
                             if let page = env["PIN_PAGE"] { model.choose(page: page) }
                             if let zoom = env["PIN_ZOOM"].flatMap(Double.init) {
                                 model.zoom(by: zoom / model.scale, at: .zero)
@@ -236,6 +237,9 @@ enum Bench {
         step += 1
         if ProcessInfo.processInfo.environment["PIN_BENCH"] == "zoom" {
             model.zoom(by: step % 200 < 100 ? 1.02 : 0.98)
+        } else if ProcessInfo.processInfo.environment["PIN_BENCH"] == "sweep" {
+            // Across the page, so new live boards keep starting.
+            model.origin.x -= 16
         } else {
             model.origin.x += sin(Double(step) / 20) * 6
         }

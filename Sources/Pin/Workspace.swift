@@ -77,18 +77,24 @@ struct Canvas: View {
             ForEach(model.placed) { item in
                 let rect = model.onScreen(item.rect)
                 if rect.insetBy(dx: -40, dy: -40).intersects(frame) {
-                    if let app = model.app, let live = LiveBoards.view(app: app, screen: item.screen.id, store: model.store) {
-                        LiveHost(view: live, design: item.rect.size, zoom: item.rect.width > 0 ? rect.width / item.rect.width : 1)
-                            .frame(width: rect.width, height: rect.height)
-                            .position(x: rect.midX, y: rect.midY)
-                    } else if let image = model.image(item.screen, item.version, shownAt: rect.width) {
+                    // A live board always keeps its picture underneath: small, or still starting, that is what shows.
+                    let live = model.app.flatMap { app in
+                        LiveBoards.size(app: app, screen: item.screen.id, store: model.store) != nil && LiveBoards.runs("\(app)/\(item.screen.id)", shownAt: rect.width)
+                            ? LiveBoards.view(app: app, screen: item.screen.id, store: model.store) : nil
+                    }
+                    if let image = model.image(item.screen, item.version, shownAt: rect.width) {
                         Image(nsImage: image).resizable().interpolation(.high)
                             .frame(width: rect.width, height: rect.height)
                             .position(x: rect.midX, y: rect.midY)
                         // Past 100% the picture runs out of detail, so the vector file takes over where there is one.
-                        if scale > 1, let file = model.vectorFile(item.screen, item.version) {
+                        if live == nil, scale > 1, let file = model.vectorFile(item.screen, item.version) {
                             VectorBoard(file: file, rect: rect, design: item.rect.size, frame: frame, zoom: scale)
                         }
+                    }
+                    if let live {
+                        LiveHost(view: live, design: item.rect.size, zoom: item.rect.width > 0 ? rect.width / item.rect.width : 1)
+                            .frame(width: rect.width, height: rect.height)
+                            .position(x: rect.midX, y: rect.midY)
                     }
                     Text(label(item)).font(Style.small).foregroundStyle(Style.grey).lineLimit(1)
                         .frame(width: max(rect.width, 40), alignment: .leading)

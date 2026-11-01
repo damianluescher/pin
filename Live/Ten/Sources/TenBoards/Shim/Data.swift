@@ -27,15 +27,21 @@ struct RepositoryFreshness: Equatable, Sendable {
 
 @MainActor
 final class Repository: ObservableObject {
-    @Published var days: [DailyMetric] = Fixtures.days
-    @Published var sleeps: [CachedSleepSession] = []
+    @Published var days: [DailyMetric] = Fixtures.days()
+    @Published var sleeps: [CachedSleepSession] = Fixtures.sleeps()
     @Published var importedSleep: [String: ImportedSleepFigures] = [:]
     @Published private(set) var refreshSeq = 0
     @Published private(set) var freshness: RepositoryFreshness = .empty
     @Published private(set) var chargeBaselines: ChargeBaselines.Resolved?
     let deviceId = "my-whoop"
     var today: DailyMetric? { days.last }
-    var vitalMetricRows: [SourcedDailyMetric] { [] }
+    /// The board's own made-up readings, handed to BodyVitalSigns below through its usual row.
+    var vitalsOff = false
+    var vitalMetricRows: [SourcedDailyMetric] { days.last.map { [SourcedDailyMetric(metric: $0, source: vitalsOff ? "off" : "fine")] } ?? [] }
+    var scoreSeries: [String: [(day: String, value: Double)]] = ["sleep_performance": Fixtures.sleepScores(), "stress": Fixtures.stress()]
+    var heartRate: [HRSample] = []
+    var workouts: [WorkoutRow] = []
+    var bucketBpm: Double? = 49
 
     nonisolated static let appleHealthSource = "apple-health"
     nonisolated static func localDayKey(_ date: Date) -> String {
@@ -49,17 +55,17 @@ final class Repository: ObservableObject {
     func refresh(days: Int = 4000) async { refreshSeq += 1 }
     func storeHandle() async -> WhoopStore? { nil }
     func checkpointForBackup() async -> Bool { true }
-    func activeDeviceDisplayName() -> String? { "WHOOP" }
-    func workoutRows(days: Int = 4000) async -> [WorkoutRow] { [] }
+    func activeDeviceDisplayName() -> String? { "WHOOP 5.0" }
+    func workoutRows(days: Int = 4000) async -> [WorkoutRow] { workouts }
     func allSleepSessions(days: Int = 4000) async -> [CachedSleepSession] { sleeps }
-    func hrSamples(from: Int, to: Int, limit: Int = 8000) async -> [HRSample] { [] }
+    func hrSamples(from: Int, to: Int, limit: Int = 8000) async -> [HRSample] { heartRate }
     func rrIntervals(from: Int, to: Int, limit: Int = 8000) async -> [RRInterval] { [] }
     func gravitySamplesUnion(from: Int, to: Int, limit: Int = 200_000) async -> [GravitySample] { [] }
-    func hrBuckets(from: Int, to: Int, bucketSeconds: Int = 300) async -> [HRBucket] { [] }
+    func hrBuckets(from: Int, to: Int, bucketSeconds: Int = 300) async -> [HRBucket] { bucketBpm.map { [HRBucket(ts: from, bpm: $0, minBpm: $0, maxBpm: $0)] } ?? [] }
     func latestBattery() async -> (ts: Int, soc: Double?, charging: Bool?)? { (Int(Date().timeIntervalSince1970), 86, false) }
     func habitualMidsleepSec(days: Int = 4000) async -> Int? { nil }
-    func series(key: String, source: String, days: Int = 4000, fullHistory: Bool = false) async -> [(day: String, value: Double)] { Fixtures.series(key) }
-    func exploreSeries(key: String, source: String, days: Int = 4000, fullHistory: Bool = false) async -> [(day: String, value: Double)] { Fixtures.series(key) }
+    func series(key: String, source: String, days: Int = 4000, fullHistory: Bool = false) async -> [(day: String, value: Double)] { scoreSeries[key] ?? [] }
+    func exploreSeries(key: String, source: String, days: Int = 4000, fullHistory: Bool = false) async -> [(day: String, value: Double)] { scoreSeries[key] ?? [] }
     func workoutZoneMinutes(from: Int, to: Int, zoneSet: HRZoneSet, source: String = "") async -> [Double]? { nil }
     func addManualNap(startTs: Int, endTs: Int) async {}
     func editSleepTimes(detectedStartTs: Int, oldEndTs: Int, storedStagesJSON: String?, newStartTs: Int, newEndTs: Int) async -> Bool { true }
@@ -87,8 +93,10 @@ final class AppModel: ObservableObject {
         var peakHr = 0
         var pausedAt: Date?
         var pausedDuration: TimeInterval = 0
+        /// A board's clock stands still at this, so a board does not change while he looks at it.
+        var heldElapsed: TimeInterval?
         var isPaused: Bool { pausedAt != nil }
-        func elapsed(at now: Date = Date()) -> TimeInterval { now.timeIntervalSince(start) - pausedDuration }
+        func elapsed(at now: Date = Date()) -> TimeInterval { heldElapsed ?? now.timeIntervalSince(start) - pausedDuration }
     }
     let live = LiveState()
     let behavior = BehaviorStore()
@@ -118,7 +126,7 @@ enum DataSourceImportKind { case whoop, appleHealth, xiaomi }
 final class HealthKitBridge: ObservableObject {
     enum Auth { case authorized, notDetermined, denied }
     @Published var auth = Auth.authorized
-    @Published var lastSync: Date? = Date()
+    @Published var lastSync: Date? = Date().addingTimeInterval(-300)
     @Published var lastError: String?
     func requestAuthorization() async {}
     func sync() async -> Int { 0 }
@@ -126,7 +134,7 @@ final class HealthKitBridge: ObservableObject {
 }
 
 enum FolderBackup {
-    static var lastBackupMs: Int = 0
+    static var lastBackupMs: Int = Int(Date().timeIntervalSince1970 * 1000)
     static var autoEnabled = true
     static var hasFolder = true
     @discardableResult static func useNoopFolder() -> Bool { true }
@@ -219,9 +227,9 @@ enum SleepModel {
     struct Metric { var series: [Double] = [] }
     static func debtNeedMin(days: [DailyMetric]) -> Double { 480 }
     static func navDays(navSessions: [CachedSleepSession]) -> [[CachedSleepSession]] { navSessions.map { [$0] } }
-    static func mergeDay(_ sessions: [CachedSleepSession], habitualMidsleepSec: Int?, motionByStart: [Int: [Double]]) -> Night? { nil }
-    static func consistencySeries(days: [DailyMetric], sleeps: [CachedSleepSession], importedSleep: [String: ImportedSleepFigures]) -> Metric { Metric() }
-    static func sleepDebtSeries(days: [DailyMetric], importedSleep: [String: ImportedSleepFigures], napSleepMinByDay: [String: Double]) -> Metric { Metric() }
+    @MainActor static func mergeDay(_ sessions: [CachedSleepSession], habitualMidsleepSec: Int?, motionByStart: [Int: [Double]]) -> Night? { sessions.last.map(Fixtures.night) }
+    static func consistencySeries(days: [DailyMetric], sleeps: [CachedSleepSession], importedSleep: [String: ImportedSleepFigures]) -> Metric { Metric(series: [82]) }
+    static func sleepDebtSeries(days: [DailyMetric], importedSleep: [String: ImportedSleepFigures], napSleepMinByDay: [String: Double]) -> Metric { Metric(series: [48]) }
 }
 
 struct BodyVitalReading {
@@ -234,7 +242,9 @@ struct BodyVitalReading {
 }
 
 enum BodyVitalSigns {
-    static func readings(sourceRows: [SourcedDailyMetric], temperatureUnit: TemperatureUnit, now: Date) -> [BodyVitalReading] { [] }
+    @MainActor static func readings(sourceRows: [SourcedDailyMetric], temperatureUnit: TemperatureUnit, now: Date) -> [BodyVitalReading] {
+        Fixtures.vitals(somethingOff: sourceRows.first?.source == "off")
+    }
 }
 
 enum DaytimeStressMode {

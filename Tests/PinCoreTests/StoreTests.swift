@@ -70,4 +70,14 @@ final class StoreTests: XCTestCase {
     func testSlug() {
         XCTAssertEqual(Store.slug("Today · Good"), "today-good")
     }
+
+    func testLiveConfigKeepsOldFilesAndAllowsABoardItsOwnSize() throws {
+        let old = #"{"library":"x","size":{"width":393,"height":852},"boards":{"today":"Today"}}"#
+        let plain = try JSONDecoder().decode(LiveConfig.self, from: Data(old.utf8))
+        XCTAssertEqual(plain.size(of: "today").height, 852)
+        let tall = #"{"library":"x","size":{"width":393,"height":852},"sizes":{"run":{"width":393,"height":1105}},"boards":{"run":"Saved run"}}"#
+        let config = try JSONDecoder().decode(LiveConfig.self, from: Data(tall.utf8))
+        XCTAssertEqual(config.size(of: "run").height, 1105)
+        XCTAssertEqual(config.size(of: "other").height, 852)
+    }
 }

@@ -1,6 +1,5 @@
 import SwiftUI
-import AVKit
-import AVFoundation
+import CoreLocation
 @_exported import UserNotifications
 @_exported import AppKit
 import AppKit
@@ -52,32 +51,50 @@ enum VideoCatalog {
     }
 }
 
-/// The exercise clip, on a Mac layer, same behaviour as the app's.
-struct TenDemoClip: NSViewRepresentable {
+/// The clip's still picture. A board does not need a video running: three of them would make a page lag.
+struct TenDemoClip: View {
     let exerciseID: String
     var isPaused = false
-    func makeNSView(context: Context) -> AVPlayerView {
-        let view = AVPlayerView()
-        view.controlsStyle = .none
-        view.videoGravity = .resizeAspectFill
-        return view
-    }
-    func updateNSView(_ view: AVPlayerView, context: Context) {
-        if context.coordinator.current != exerciseID, let url = VideoCatalog.clipURL(exerciseID) {
-            context.coordinator.current = exerciseID
-            let item = AVPlayerItem(url: url)
-            let player = AVQueuePlayer(playerItem: item)
-            player.isMuted = true
-            context.coordinator.looper = AVPlayerLooper(player: player, templateItem: item)
-            view.player = player
+    var body: some View { TenPoster(exerciseID: exerciseID) }
+}
+
+/// The map, drawn. A board asks no map server for anything and no one for the location, and looks the same every time.
+struct TenRouteMap: View {
+    let points: [CLLocationCoordinate2D]
+    var followsUser = false
+
+    var body: some View {
+        Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.06)))
+            var streets = Path()
+            for (from, to) in [((-0.1, 0.1), (1.1, 0.42)), ((-0.1, 0.62), (1.1, 0.34)), ((0.25, -0.1), (0.2, 1.1)), ((0.62, -0.1), (0.56, 1.1)), ((0.9, -0.1), (0.8, 1.1)), ((-0.1, 0.86), (1.1, 1.0))] {
+                streets.move(to: CGPoint(x: from.0 * size.width, y: from.1 * size.height))
+                streets.addLine(to: CGPoint(x: to.0 * size.width, y: to.1 * size.height))
+            }
+            context.stroke(streets, with: .color(Color(white: 0.17)), lineWidth: 5)
+            let route = points.count >= 2 ? points : Fixtures.route(metres: 4820, secondsPerKm: [332], startMs: 0).map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+            guard let south = route.map(\.latitude).min(), let north = route.map(\.latitude).max(),
+                  let west = route.map(\.longitude).min(), let east = route.map(\.longitude).max(), north > south, east > west else { return }
+            let usable = CGSize(width: size.width * 0.86, height: size.height * 0.5)
+            var line = Path()
+            for (index, point) in route.enumerated() {
+                let spot = CGPoint(x: size.width * 0.07 + usable.width * (point.longitude - west) / (east - west),
+                                   y: size.height * 0.14 + usable.height * (north - point.latitude) / (north - south))
+                if index == 0 { line.move(to: spot) } else { line.addLine(to: spot) }
+            }
+            context.stroke(line, with: .color(TenColor.white), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
         }
-        if isPaused { view.player?.pause() } else { view.player?.play() }
+        .accessibilityLabel("Route map")
     }
-    func makeCoordinator() -> Coordinator { Coordinator() }
-    final class Coordinator {
-        var current: String?
-        var looper: AVPlayerLooper?
-    }
+}
+
+/// Boards never ask for notification permission or schedule anything: this stands in for the system's centre.
+final class UNUserNotificationCenter {
+    private static let shared = UNUserNotificationCenter()
+    static func current() -> UNUserNotificationCenter { shared }
+    func requestAuthorization(options: UNAuthorizationOptions, completionHandler: @escaping (Bool, Error?) -> Void) {}
+    func add(_ request: UNNotificationRequest) {}
+    func removePendingNotificationRequests(withIdentifiers: [String]) {}
 }
 
 extension View {
