@@ -181,6 +181,7 @@ struct CanvasEvents: NSViewRepresentable {
         private var pressed: NSPoint?
         private var dragged = false
         private var movingBoard = false
+        private var lastPoint: NSPoint?
 
         override var isFlipped: Bool { true }
         /// The real size of the canvas, from the view that fills it.
@@ -226,8 +227,10 @@ struct CanvasEvents: NSViewRepresentable {
             let now = here(event)
             if !dragged, hypot(now.x - start.x, now.y - start.y) < 4 { return }
             dragged = true
+            let last = lastPoint ?? start
+            lastPoint = now
             MainActor.assumeIsolated {
-                if movingBoard { model?.move(event.deltaX, event.deltaY) } else { model?.pan(event.deltaX, event.deltaY) }
+                if movingBoard { model?.move(now.x - last.x, now.y - last.y) } else { model?.pan(now.x - last.x, now.y - last.y) }
             }
         }
 
@@ -243,6 +246,7 @@ struct CanvasEvents: NSViewRepresentable {
             }
             movingBoard = false
             pressed = nil
+            lastPoint = nil
         }
 
     }
