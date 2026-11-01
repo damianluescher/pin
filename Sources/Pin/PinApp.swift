@@ -29,13 +29,13 @@ struct PinApp: App {
                                 model.zoom(by: zoom / model.scale, at: .zero)
                                 // PIN_X and PIN_Y are measured from the first board's corner, in screen points.
                                 let corner = model.placed.first?.rect.origin ?? .zero
-                                model.origin = CGPoint(x: (env["PIN_X"].flatMap(Double.init) ?? 0) - corner.x * zoom,
-                                                       y: (env["PIN_Y"].flatMap(Double.init) ?? 0) - corner.y * zoom)
+                                model.look(scale: model.scale, origin: CGPoint(x: (env["PIN_X"].flatMap(Double.init) ?? 0) - corner.x * zoom,
+                                                                               y: (env["PIN_Y"].flatMap(Double.init) ?? 0) - corner.y * zoom))
                             }
                         }
                         // For checking: PIN_FILM=FOLDER zooms in and out by small steps and saves a picture of each.
                         if let folder = env["PIN_FILM"] {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { Film.run(model, folder: folder) }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { Film(model: model, folder: folder).start() }
                         }
                         // For measuring: PIN_BENCH=1 moves the canvas for 5 seconds and writes how smooth it was.
                         if env["PIN_BENCH"] != nil {
@@ -45,7 +45,7 @@ struct PinApp: App {
                         if env["PIN_PRESS"] != nil {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { PressCheck(model: model, folder: out).start() }
                         }
-                        if env["PIN_PRESS"] == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                        if env["PIN_PRESS"] == nil, env["PIN_FILM"] == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
                             guard let frame = NSApp.windows.first(where: { $0.isVisible })?.contentView?.superview,
                                   let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else { return }
                             frame.cacheDisplay(in: frame.bounds, to: rep)
@@ -154,20 +154,30 @@ struct RootView: View {
                 .pickerStyle(.segmented).labelStyle(.iconOnly)
             }
             ToolbarItem(placement: .primaryAction) {
-                Menu("\(Int(model.scale * 100))%") {
-                    Button("Zoom In") { model.zoom(by: 1.25) }
-                    Button("Zoom Out") { model.zoom(by: 0.8) }
-                    Button("Actual Size") { model.actualSize() }
-                    Button("Fit Page") { model.fit() }
-                    Divider()
-                    Toggle("Show All Versions", isOn: $model.showAllVersions)
-                }
-                .monospacedDigit()
+                ZoomMenu()
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { showComments.toggle() } label: { Label("Comments", systemImage: "sidebar.right") }.help("Comments")
             }
         }
+    }
+}
+
+/// Its own small view, so the toolbar around it is not redone as the zoom changes.
+struct ZoomMenu: View {
+    @Environment(Model.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        Menu("\(model.percent)%") {
+            Button("Zoom In") { model.zoom(by: 1.25) }
+            Button("Zoom Out") { model.zoom(by: 0.8) }
+            Button("Actual Size") { model.actualSize() }
+            Button("Fit Page") { model.fit() }
+            Divider()
+            Toggle("Show All Versions", isOn: $model.showAllVersions)
+        }
+        .monospacedDigit()
     }
 }
 
@@ -260,39 +270,53 @@ enum Snapshot {
     }
 }
 
-/// Moves the canvas the way a drag does and reports the time between frames.
+/// Moves the canvas once per screen frame, by the display's own clock, for 5 seconds at most. Reports the time between
+/// frames, how many ran late, and what one camera step cost the main thread.
 @MainActor
-enum Bench {
-    private static var gaps: [Double] = []
-    private static var last = CACurrentMediaTime()
-    private static var step = 0
+final class Bench: NSObject {
+    private static var running: Bench?
+    private let model: Model
+    private let mode = ProcessInfo.processInfo.environment["PIN_BENCH"]
+    private var gaps: [Double] = []
+    private var costs: [Double] = []
+    private var last = 0.0
+    private var step = 0
+    private var link: CADisplayLink?
+
+    private init(_ model: Model) { self.model = model }
 
     static func run(_ model: Model) {
-        last = CACurrentMediaTime()
-        tick(model)
+        let bench = Bench(model)
+        running = bench
+        guard let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        let link = view.displayLink(target: bench, selector: #selector(frame))
+        link.add(to: .main, forMode: .common)
+        bench.link = link
     }
 
-    private static func tick(_ model: Model) {
+    @objc private func frame() {
         let now = CACurrentMediaTime()
-        gaps.append((now - last) * 1000)
+        if last > 0 { gaps.append((now - last) * 1000) }
         last = now
         step += 1
-        if ProcessInfo.processInfo.environment["PIN_BENCH"] == "zoom" {
-            model.zoom(by: step % 200 < 100 ? 1.02 : 0.98)
-        } else if ProcessInfo.processInfo.environment["PIN_BENCH"] == "sweep" {
-            // Across the page, so new live boards keep starting.
-            model.origin.x -= 16
-        } else {
-            model.origin.x += sin(Double(step) / 20) * 6
+        switch mode {
+        case "zoom": model.zoom(by: step % 200 < 100 ? 1.02 : 0.98)
+        // Across the page, so new live boards keep starting.
+        case "sweep": model.pan(-16, 0)
+        default: model.pan(sin(Double(step) / 20) * 6, 0)
         }
-        if step < 300 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 120) { tick(model) }
-        } else {
-            let sorted = gaps.dropFirst().sorted()
-            let total = sorted.reduce(0, +)
-            print("frames per second \(Int(Double(sorted.count) / total * 1000)), typical \(Int(sorted[sorted.count / 2])) ms, worst \(Int(sorted.last ?? 0)) ms")
-            fflush(stdout)
-        }
+        CATransaction.flush()
+        costs.append((CACurrentMediaTime() - now) * 1000)
+        guard step >= 300 else { return }
+        link?.invalidate()
+        let sorted = gaps.sorted(), cost = costs.sorted()
+        let typical = sorted[sorted.count / 2]
+        let late = sorted.filter { $0 > typical * 1.5 }.count
+        print("frames per second \(Int(Double(sorted.count) / sorted.reduce(0, +) * 1000)), typical \(String(format: "%.1f", typical)) ms, worst \(Int(sorted.last ?? 0)) ms, late \(late) of \(sorted.count); one step on the main thread: typical \(String(format: "%.2f", cost[cost.count / 2])) ms, worst \(String(format: "%.2f", cost.last ?? 0)) ms")
+        fflush(stdout)
+        exit(0)
     }
 }
 
@@ -387,11 +411,36 @@ final class PressCheck {
         then { if let item = self.board(swiftBoard) { self.click(self.spot(item, 72, tabY)) } }
         then(1.0) { self.shoot("4-cursor-no-press") }
         // Sharp at high zoom, and the press mapping does not care.
-        then { self.model.zoom(by: 4 / self.model.scale, at: .zero); if let item = self.board(swiftBoard) { self.model.origin = CGPoint(x: 20 - item.rect.minX * 4, y: 20 - item.rect.minY * 4) } }
+        then { self.model.zoom(by: 4 / self.model.scale, at: .zero); if let item = self.board(swiftBoard) { self.model.look(scale: 4, origin: CGPoint(x: 20 - item.rect.minX * 4, y: 20 - item.rect.minY * 4)) } }
         then(2) { self.shoot("4b-zoom4") }
         // Key: P comes back.
         then { self.type("p") }
         then { self.say("after P key tool press: \(self.model.tool == .press)") }
+        // At high zoom a press must still land: the pushed screen's back arrow, then the look at what it did.
+        then { self.say("back arrow at zoom 4"); if let item = self.board(swiftBoard) { self.click(self.spot(item, 38, 76)) } }
+        then(1.2) { self.shoot("4c-back-at-zoom4") }
+        // The comment tool places its dot at the exact spot, at any zoom.
+        then {
+            self.model.tool = .comment
+            if let item = self.board(swiftBoard) { self.click(self.spot(item, 100, 50)) }
+        }
+        then {
+            if let draft = self.model.draft { self.say("comment at \(draft.x * draft.placed.rect.width), \(draft.y * draft.placed.rect.height) (design spot 100,50)") } else { self.say("no comment dot") }
+            self.model.draft = nil
+            self.model.tool = .move
+            // The cursor drags the board by 40 screen points, 10 canvas points at zoom 4.
+            if let item = self.board(swiftBoard), let at = self.spot(item, 100, 50) {
+                self.say("board at \(item.rect.origin)")
+                self.mouse(.leftMouseDown, at)
+                self.mouse(.leftMouseDragged, NSPoint(x: at.x + 20, y: at.y))
+                self.mouse(.leftMouseDragged, NSPoint(x: at.x + 40, y: at.y))
+                self.mouse(.leftMouseUp, NSPoint(x: at.x + 40, y: at.y))
+            }
+        }
+        then {
+            if let item = self.board(swiftBoard) { self.say("board dragged to \(item.rect.origin)") }
+            self.model.tool = .press
+        }
         // The web board.
         then { self.model.open("PressTest") }
         then(1) {
@@ -422,7 +471,7 @@ final class PressCheck {
         then {
             self.page("page")?.evaluate("window.lower ? 'pressed' : 'not pressed'") { self.say("cursor tool, page button: \($0 ?? "nil")") }
             self.model.zoom(by: 6 / self.model.scale, at: .zero)
-            if let item = self.board("page") { self.model.origin = CGPoint(x: 40 - item.rect.minX * 6, y: 40 - item.rect.minY * 6) }
+            if let item = self.board("page") { self.model.look(scale: 6, origin: CGPoint(x: 40 - item.rect.minX * 6, y: 40 - item.rect.minY * 6)) }
         }
         then(1.5) {
             self.page("page")?.evaluate("'zoom 6: dpr ' + devicePixelRatio + ' layout width ' + innerWidth") { self.say("\($0 ?? "nil")") }
@@ -436,31 +485,5 @@ final class PressCheck {
         }
         then(1) { self.say("done"); exit(0) }
         run()
-    }
-}
-
-
-/// A filmstrip of the zoom, for looking at what really moves: the same anchor all the way, so nothing but the size may change.
-@MainActor
-enum Film {
-    static func run(_ model: Model, folder: String) {
-        let steps: [CGFloat] = Array(repeating: 1.12, count: 14) + Array(repeating: 1 / 1.12, count: 14)
-        let anchor = CGPoint(x: model.viewport.width / 2, y: model.viewport.height / 2)
-        func step(_ i: Int) {
-            guard i < steps.count else { exit(0) }
-            model.zoom(by: steps[i], at: anchor)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) {
-                MainActor.assumeIsolated {
-                    if let view = NSApp.windows.first(where: { $0.isVisible })?.contentView?.superview,
-                       let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
-                        view.cacheDisplay(in: view.bounds, to: rep)
-                        let name = String(format: "%@/%02d.png", folder, i)
-                        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: name))
-                    }
-                    step(i + 1)
-                }
-            }
-        }
-        step(0)
     }
 }

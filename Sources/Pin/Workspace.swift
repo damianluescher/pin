@@ -2,144 +2,52 @@ import AppKit
 import PinCore
 import SwiftUI
 
+/// The canvas. Everything that moves with the camera lives in AppKit (see Stage.swift); SwiftUI only says what is on
+/// the page and shows the comment beside its pin. This body does not read the camera, so zooming never reruns it.
 struct Canvas: View {
     @Environment(Model.self) private var model
 
     var body: some View {
         GeometryReader { box in
             ZStack(alignment: .topLeading) {
-                Style.canvas
-                dots(in: box.size).allowsHitTesting(false)
-                CanvasEvents()
-                boards(in: box.size).allowsHitTesting(false)
-                flowArrows.allowsHitTesting(false)
-                pins.allowsHitTesting(false)
-                bubble(in: box.size)
+                CanvasEvents(scene: scene)
+                CanvasBubble(size: box.size)
             }
             .clipped()
         }
     }
 
-    /// The board's dots. They move and zoom with the canvas; zoomed far out only every other row and column stays.
-    private func dots(in size: CGSize) -> some View {
-        let scale = model.scale, origin = model.origin
-        return SwiftUI.Canvas { context, _ in
-            var step: CGFloat = 40 * scale
-            while step < 14 { step *= 2 }
-            let radius: CGFloat = 1.1
-            var x = origin.x.truncatingRemainder(dividingBy: step)
-            if x < 0 { x += step }
-            var dots = Path()
-            while x < size.width {
-                var y = origin.y.truncatingRemainder(dividingBy: step)
-                if y < 0 { y += step }
-                while y < size.height {
-                    dots.addEllipse(in: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2))
-                    y += step
-                }
-                x += step
-            }
-            context.fill(dots, with: .color(.white.opacity(0.17)))
+    private var scene: StageScene {
+        var pins = model.allThreads.compactMap { thread -> StageScene.Pin? in
+            guard !thread.resolved || model.showResolved || model.selected == thread.id,
+                  let box = model.placed.first(where: { $0.screen.id == thread.screen && $0.version.n == thread.version }) else { return nil }
+            return StageScene.Pin(number: model.number(of: thread), chosen: model.selected == thread.id, faded: thread.resolved,
+                                  spot: CGPoint(x: box.rect.minX + box.rect.width * thread.x, y: box.rect.minY + box.rect.height * thread.y))
         }
-    }
-
-    /// The flow, the way node canvases draw it: a thin S-curve from a dot on one board's side to a dot on the next,
-    /// branches leaving from one dot, and the label as plain small text on the line's last stretch.
-    private var flowArrows: some View {
-        let lines = model.flowLines.map { (model.onScreen($0.from), model.onScreen($0.to), $0.label) }
-        return SwiftUI.Canvas { context, _ in
-            let ink = Color.white.opacity(0.42)
-            let port: CGFloat = 4
-            for (start, end, _) in lines {
-                let pull = max(abs(end.x - start.x) * 0.5, 30) * (end.x >= start.x ? 1 : -1)
-                var line = Path()
-                line.move(to: start)
-                line.addCurve(to: end, control1: CGPoint(x: start.x + pull, y: start.y), control2: CGPoint(x: end.x - pull, y: end.y))
-                context.stroke(line, with: .color(ink), lineWidth: 1.5)
-            }
-            for (start, end, label) in lines {
-                for dot in [start, end] {
-                    context.fill(Path(ellipseIn: CGRect(x: dot.x - port, y: dot.y - port, width: port * 2, height: port * 2)), with: .color(Color(white: 0.75)))
-                }
-                if let label {
-                    let text = context.resolve(Text(label).font(Style.small).foregroundColor(Style.grey))
-                    let leftward = end.x < start.x
-                    context.draw(text, at: CGPoint(x: end.x + (leftward ? 12 : -12), y: end.y - 13), anchor: leftward ? .leading : .trailing)
-                }
-            }
+        if let draft = model.draft {
+            let rect = draft.placed.rect
+            pins.append(StageScene.Pin(number: model.threads(on: draft.placed).count + 1, chosen: true, faded: false,
+                                       spot: CGPoint(x: rect.minX + rect.width * draft.x, y: rect.minY + rect.height * draft.y)))
         }
+        return StageScene(app: model.app, page: model.page, boards: model.placed, pins: pins, flows: model.flowLines)
     }
+}
 
-    private func boards(in size: CGSize) -> some View {
-        let frame = CGRect(origin: .zero, size: size)
-        let scale = model.scale
-        let pages = runningPages(in: frame)
-        return ZStack(alignment: .topLeading) {
-            ForEach(model.placed) { item in
-                let rect = model.onScreen(item.rect)
-                if rect.insetBy(dx: -40, dy: -40).intersects(frame) {
-                    // A live board always keeps its picture underneath: small, or still starting, that is what shows.
-                    let live = model.app.flatMap { app in
-                        LiveBoards.swiftBoard(app: app, screen: item.screen.id, store: model.store) && LiveBoards.runs("\(app)/\(item.screen.id)", shownAt: rect.width)
-                            ? LiveBoards.view(app: app, screen: item.screen.id, store: model.store) : nil
-                    }
-                    let key = "\(model.app ?? "")/\(item.id)"
-                    let page = pages.contains(key) ? model.app.flatMap { LiveBoards.web(app: $0, screen: item.screen.id, store: model.store) } : nil
-                    if let image = model.image(item.screen, item.version, shownAt: rect.width) {
-                        Image(nsImage: image).resizable().interpolation(.high)
-                            .frame(width: rect.width, height: rect.height)
-                            .position(x: rect.midX, y: rect.midY)
-                        // Past 100% the picture runs out of detail, so the vector file takes over where there is one.
-                        if live == nil, page == nil, scale > 1, let file = model.vectorFile(item.screen, item.version) {
-                            VectorBoard(file: file, rect: rect, design: item.rect.size, frame: frame, zoom: scale)
-                        }
-                    }
-                    if let live {
-                        LiveHost(key: key, view: live, design: item.rect.size, zoom: item.rect.width > 0 ? rect.width / item.rect.width : 1)
-                            .frame(width: rect.width, height: rect.height)
-                            .position(x: rect.midX, y: rect.midY)
-                    }
-                    if let page {
-                        WebHost(key: key, page: page, design: item.rect.size, zoom: item.rect.width > 0 ? rect.width / item.rect.width : 1)
-                            .frame(width: rect.width, height: rect.height)
-                            .position(x: rect.midX, y: rect.midY)
-                    }
-                    Text(label(item)).font(Style.small).foregroundStyle(Style.grey).lineLimit(1)
-                        .frame(width: max(rect.width, 40), alignment: .leading)
-                        .position(x: rect.minX + max(rect.width, 40) / 2, y: rect.minY - 11)
-                }
-            }
-        }
-    }
+/// The comment beside its pin, kept inside the canvas. It alone follows the camera through SwiftUI, and only while one is open.
+private struct CanvasBubble: View {
+    @Environment(Model.self) private var model
+    let size: CGSize
 
-    /// Which web boards may run now: on screen, at a usable size, and no more than the page cap.
-    /// An older version of a board stays its picture: the page is only ever the current code.
-    private func runningPages(in frame: CGRect) -> Set<String> {
-        guard let app = model.app, LiveBoards.hasWeb(app: app, store: model.store) else { return [] }
-        return WebBoards.choose(model.placed.compactMap { item in
-            let rect = model.onScreen(item.rect), key = "\(app)/\(item.id)"
-            guard item.version.n == item.screen.latest?.n, LiveBoards.web(app: app, screen: item.screen.id, store: model.store) != nil,
-                  rect.intersects(frame), LiveBoards.runs(key, shownAt: rect.width) else { return nil }
-            return (key, rect.intersection(frame).width * rect.intersection(frame).height)
-        })
-    }
-
-    private func label(_ item: Placed) -> String {
-        item.screen.versions.count > 1 ? "\(item.screen.name) · v\(item.version.n)" : item.screen.name
-    }
-
-    private var pins: some View {
-        ZStack(alignment: .topLeading) {
-            ForEach(model.allThreads) { thread in
-                if !thread.resolved || model.showResolved || model.selected == thread.id, let point = model.pinPoint(thread) {
-                    PinDot(number: model.number(of: thread), chosen: model.selected == thread.id)
-                        .opacity(thread.resolved ? 0.55 : 1)
-                        .position(point)
-                }
-            }
-            if let draft = model.draft {
-                PinDot(number: model.threads(on: draft.placed).count + 1, chosen: true).position(point(of: draft))
-            }
+    var body: some View {
+        let width: CGFloat = 320
+        let _ = model.bubbleTick
+        if let draft = model.draft {
+            let p = point(of: draft)
+            NewComment(draft: draft).frame(width: width).id("\(draft.placed.id)\(draft.x)\(draft.y)")
+                .offset(place(p, width: width))
+        } else if let id = model.selected, let thread = model.allThreads.first(where: { $0.id == id }), let p = model.pinPoint(thread) {
+            ThreadBubble(thread: thread).frame(width: width).id(thread.id)
+                .offset(place(p, width: width))
         }
     }
 
@@ -148,20 +56,7 @@ struct Canvas: View {
         return CGPoint(x: rect.minX + rect.width * draft.x, y: rect.minY + rect.height * draft.y)
     }
 
-    /// The comment beside its pin, kept inside the canvas.
-    @ViewBuilder private func bubble(in size: CGSize) -> some View {
-        let width: CGFloat = 320
-        if let draft = model.draft {
-            let p = point(of: draft)
-            NewComment(draft: draft).frame(width: width).id("\(draft.placed.id)\(draft.x)\(draft.y)")
-                .offset(place(p, width: width, in: size))
-        } else if let id = model.selected, let thread = model.allThreads.first(where: { $0.id == id }), let p = model.pinPoint(thread) {
-            ThreadBubble(thread: thread).frame(width: width).id(thread.id)
-                .offset(place(p, width: width, in: size))
-        }
-    }
-
-    private func place(_ p: CGPoint, width: CGFloat, in size: CGSize) -> CGSize {
+    private func place(_ p: CGPoint, width: CGFloat) -> CGSize {
         let x = p.x + 22 + width > size.width - 12 ? p.x - 22 - width : p.x + 22
         let y = min(max(p.y - 16, 12), size.height - 260)
         return CGSize(width: max(x, 12), height: y)
@@ -171,9 +66,11 @@ struct Canvas: View {
 /// Takes the mouse, the trackpad and the keys for the canvas.
 struct CanvasEvents: NSViewRepresentable {
     @Environment(Model.self) private var model
+    let scene: StageScene
 
-    func makeNSView(context: Context) -> EventView {
-        let view = EventView()
+    func makeNSView(context: Context) -> Stage {
+        let stage = Stage(model: model)
+        let view = stage.events
         view.model = model
         // C comments; A and Esc go back to the cursor; P presses (Damian, 1 Nov 2026). Not while he is typing in a field.
         view.keys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak view] event in
@@ -205,16 +102,17 @@ struct CanvasEvents: NSViewRepresentable {
                 return nil
             }
         }
-        return view
+        return stage
     }
 
-    static func dismantleNSView(_ view: EventView, coordinator: ()) {
-        if let keys = view.keys { NSEvent.removeMonitor(keys) }
+    static func dismantleNSView(_ stage: Stage, coordinator: ()) {
+        if let keys = stage.events.keys { NSEvent.removeMonitor(keys) }
     }
 
-    func updateNSView(_ view: EventView, context: Context) {
-        view.model = model
-        view.tool = model.tool
+    func updateNSView(_ stage: Stage, context: Context) {
+        stage.events.model = model
+        stage.events.tool = model.tool
+        stage.show(scene)
     }
 
     final class EventView: NSView {
@@ -234,13 +132,6 @@ struct CanvasEvents: NSViewRepresentable {
         private var lastPoint: NSPoint?
 
         override var isFlipped: Bool { true }
-        /// The real size of the canvas, from the view that fills it.
-        override func setFrameSize(_ size: NSSize) {
-            super.setFrameSize(size)
-            DispatchQueue.main.async { [weak self] in
-                MainActor.assumeIsolated { self?.model?.sized(size) }
-            }
-        }
         override var acceptsFirstResponder: Bool { true }
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
         override func resetCursorRects() {

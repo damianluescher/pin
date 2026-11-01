@@ -1,4 +1,3 @@
-import ImageIO
 import AppKit
 import Observation
 import PinCore
@@ -40,8 +39,16 @@ struct Draft: Equatable {
 
     var page: String?
     var tool = Tool.comment
-    var scale: CGFloat = 0.5
-    var origin = CGPoint.zero
+    /// The camera: one point and one zoom. Nothing in SwiftUI observes them, so a zoom step reruns no view; `look` hands
+    /// them to the stage, which applies them once to the whole canvas.
+    @ObservationIgnored private(set) var scale: CGFloat = 0.5
+    @ObservationIgnored private(set) var origin = CGPoint.zero
+    @ObservationIgnored var onCamera: (() -> Void)?
+    /// The zoom shown in the toolbar, updated a few times a second at most.
+    private(set) var percent = 50
+    @ObservationIgnored private var percentShown = Date.distantPast
+    /// Moves an open comment along with the camera; nothing reads it otherwise.
+    private(set) var bubbleTick = 0
     var viewport = CGSize(width: 800, height: 600)
     var selected: String?
     var draft: Draft?
@@ -349,8 +356,24 @@ struct Draft: Equatable {
         let anchor = point ?? CGPoint(x: viewport.width / 2, y: viewport.height / 2)
         let next = min(max(scale * factor, 0.05), 16)
         let change = next / scale
-        origin = CGPoint(x: anchor.x - (anchor.x - origin.x) * change, y: anchor.y - (anchor.y - origin.y) * change)
-        scale = next
+        look(scale: next, origin: CGPoint(x: anchor.x - (anchor.x - origin.x) * change, y: anchor.y - (anchor.y - origin.y) * change))
+    }
+
+    /// The one way the camera changes.
+    func look(scale: CGFloat, origin: CGPoint) {
+        self.scale = scale
+        self.origin = origin
+        onCamera?()
+        if selected != nil || draft != nil { bubbleTick &+= 1 }
+        showPercent()
+    }
+
+    func showPercent(now: Bool = false) {
+        let date = Date()
+        guard now || date.timeIntervalSince(percentShown) > 0.1 else { return }
+        percentShown = date
+        let value = Int(scale * 100)
+        if value != percent { percent = value }
     }
 
     /// A wheel notch: heads for the new zoom over a few frames instead of snapping there. More notches just move the goal.
@@ -378,8 +401,7 @@ struct Draft: Equatable {
 
     func pan(_ x: CGFloat, _ y: CGFloat) {
         keepFitted = false
-        origin.x += x
-        origin.y += y
+        look(scale: scale, origin: CGPoint(x: origin.x + x, y: origin.y + y))
     }
 
     func sized(_ size: CGSize) {
@@ -395,9 +417,9 @@ struct Draft: Equatable {
         let all = boxes.reduce(first) { $0.union($1) }
         let room: CGFloat = 60
         let next = min((viewport.width - 2 * room) / all.width, (viewport.height - 2 * room) / all.height, 1)
-        scale = max(next, 0.05)
-        origin = CGPoint(x: (viewport.width - all.width * scale) / 2 - all.minX * scale,
-                         y: (viewport.height - all.height * scale) / 2 - all.minY * scale)
+        let zoom = max(next, 0.05)
+        look(scale: zoom, origin: CGPoint(x: (viewport.width - all.width * zoom) / 2 - all.minX * zoom,
+                                          y: (viewport.height - all.height * zoom) / 2 - all.minY * zoom))
     }
 
     /// Brings a comment into view and opens it, moving to its page when it sits on another one.
@@ -415,9 +437,9 @@ struct Draft: Equatable {
         keepFitted = false
         guard let box = placed.last(where: { $0.screen.id == screen.id }) else { return }
         let next = min((viewport.width - 120) / box.rect.width, (viewport.height - 120) / box.rect.height, 1)
-        scale = max(next, 0.05)
-        origin = CGPoint(x: (viewport.width - box.rect.width * scale) / 2 - box.rect.minX * scale,
-                         y: (viewport.height - box.rect.height * scale) / 2 - box.rect.minY * scale)
+        let zoom = max(next, 0.05)
+        look(scale: zoom, origin: CGPoint(x: (viewport.width - box.rect.width * zoom) / 2 - box.rect.minX * zoom,
+                                          y: (viewport.height - box.rect.height * zoom) / 2 - box.rect.minY * zoom))
     }
 
     /// The comment dot under the point, if one shows there.
@@ -453,20 +475,7 @@ struct Draft: Equatable {
 
     // MARK: Files
 
-    /// The picture, at a lighter size while its board is small on screen: enlarging is rare, shrinking 40 full
-    /// pictures on every frame is what makes a big page lag.
-    func image(_ screen: Screen, _ version: Version, app name: String? = nil, shownAt width: CGFloat = .infinity) -> NSImage? {
-        guard let name = name ?? app else { return nil }
-        let url = store.picture(app: name, screen: screen.id, version: version)
-        let light = width < Self.lightWidth / 2
-        let key = (light ? "light:" + url.path : url.path) as NSString
-        if let cached = Self.cache.object(forKey: key) { return cached }
-        guard let image = light ? Self.lightImage(url) : NSImage(contentsOf: url) else { return nil }
-        Self.cache.setObject(image, forKey: key)
-        return image
-    }
-
-    /// The board's vector file, when it was copied from a design file. Remembered, since this is asked on every frame.
+    /// The board's vector file, when it was copied from a design file. Remembered, since this is asked for every board each time the canvas settles.
     func vectorFile(_ screen: Screen, _ version: Version) -> URL? {
         guard let app else { return nil }
         let url = store.picture(app: app, screen: screen.id, version: version).deletingPathExtension().appendingPathExtension("pdf")
@@ -492,17 +501,6 @@ struct Draft: Equatable {
         }
     }
 
-    private static let lightWidth: CGFloat = 800
-
-    private static func lightImage(_ url: URL) -> NSImage? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return NSImage(contentsOf: url) }
-        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
-                                        kCGImageSourceShouldCacheImmediately: true, kCGImageSourceThumbnailMaxPixelSize: lightWidth * 2]
-        guard let small = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return NSImage(contentsOf: url) }
-        return NSImage(cgImage: small, size: .zero)
-    }
-
-    private static let cache = NSCache<NSString, NSImage>()
     /// Reading a picture's size from disk on every frame of a drag is too slow.
     private static var pixels: [String: CGSize] = [:]
 }

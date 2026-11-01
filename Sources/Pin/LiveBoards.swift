@@ -88,7 +88,7 @@ enum LiveBoards {
 
     /// Screens he has pressed keep their own place (tab, pushed screen, scroll) after they leave the view.
     /// Ones he never touched are simply started again, so a long page holds nothing it does not need.
-    static var keptScreens: [String: LiveHost.Container] = [:]
+    static var keptScreens: [String: SwiftBoardView] = [:]
 
     private static func library(_ path: String) -> UnsafeMutableRawPointer? {
         if let open = libraries[path] { return open }
@@ -114,134 +114,111 @@ protocol PressableBoard: AnyObject {
     func isTyping(_ responder: NSResponder?) -> Bool
 }
 
-/// The zoom a live screen is drawn at. Only the small view below reads it, so a change does not rerun the screen.
-final class BoardZoom: ObservableObject {
-    @Published var value: CGFloat
-    init(_ value: CGFloat) { self.value = value }
-}
-
-/// SwiftUI's own scale, because SwiftUI places clicks by its own transforms: scaling its host through view bounds
-/// looks right but lands every click at the unscaled spot (measured 1 Nov 2026).
-struct ScaledScreen: View {
-    let screen: AnyView
-    let design: CGSize
-    @ObservedObject var zoom: BoardZoom
-
-    var body: some View {
-        screen
-            .frame(width: design.width, height: design.height)
-            .scaleEffect(zoom.value, anchor: .topLeading)
-            .frame(width: design.width * zoom.value, height: design.height * zoom.value, alignment: .topLeading)
+/// SwiftUI places a click by its distance in the window from the host's corner, ignoring the camera's magnification, so a
+/// click would land at the unzoomed spot (measured 1 Nov 2026). AppKit does know the zoom, so each mouse event is handed on
+/// with the window location SwiftUI needs for the point AppKit found.
+private final class CameraHost: NSHostingView<AnyView> {
+    private func unzoomed(_ event: NSEvent) -> NSEvent {
+        let point = convert(event.locationInWindow, from: nil)
+        let corner = convert(bounds.origin, to: nil)
+        let place = NSPoint(x: corner.x + point.x, y: corner.y - point.y)
+        return NSEvent.mouseEvent(with: event.type, location: place, modifierFlags: event.modifierFlags, timestamp: event.timestamp,
+                                  windowNumber: event.windowNumber, context: nil, eventNumber: event.eventNumber,
+                                  clickCount: event.clickCount, pressure: event.pressure) ?? event
     }
+    override func mouseDown(with event: NSEvent) { super.mouseDown(with: unzoomed(event)) }
+    override func mouseDragged(with event: NSEvent) { super.mouseDragged(with: unzoomed(event)) }
+    override func mouseUp(with event: NSEvent) { super.mouseUp(with: unzoomed(event)) }
+    override func rightMouseDown(with event: NSEvent) { super.rightMouseDown(with: unzoomed(event)) }
+    override func rightMouseUp(with event: NSEvent) { super.rightMouseUp(with: unzoomed(event)) }
 }
 
-/// A live screen on the canvas. It keeps laying out at its design size; the enlarging happens in ScaledScreen, and
-/// every layer inside is told to draw at the zoom's sharpness, so nothing is a small bitmap blown up.
-struct LiveHost: NSViewRepresentable {
-    let key: String
-    let view: AnyView
-    let design: CGSize
-    let zoom: CGFloat
+/// A live screen on the canvas, at its design size for good. The camera does the enlarging; once the zoom has settled,
+/// every layer inside is told to draw at the zoom's sharpness, so nothing stays a small bitmap blown up.
+final class SwiftBoardView: NSView, PressableBoard {
+    private weak var host: NSView?
+    private let key: String
+    private var drawn: CGFloat = 0
+    private var again: DispatchWorkItem?
+    private var routing = false
 
-    func makeNSView(context: Context) -> Container {
-        if let kept = LiveBoards.keptScreens[key] {
-            LiveBoards.register(kept, key: key)
-            return kept
-        }
-        let scale = BoardZoom(zoom)
-        let host = NSHostingView(rootView: ScaledScreen(screen: view, design: design, zoom: scale))
+    /// A screen he pressed earlier keeps its place; otherwise a new one starts.
+    static func make(key: String, view: AnyView, design: CGSize) -> SwiftBoardView {
+        let board = LiveBoards.keptScreens[key] ?? SwiftBoardView(key: key, view: view, design: design)
+        LiveBoards.register(board, key: key)
+        return board
+    }
+
+    private init(key: String, view: AnyView, design: CGSize) {
+        self.key = key
+        super.init(frame: CGRect(origin: .zero, size: design))
+        let host = CameraHost(rootView: AnyView(view.frame(width: design.width, height: design.height)))
         host.sizingOptions = []
         // A board passing under the toolbar must not get pushed down by the window's safe area.
         host.safeAreaRegions = []
         host.autoresizingMask = [.width, .height]
-        let box = Container()
-        box.key = key
-        box.scale = scale
-        box.wantsLayer = true
-        box.frame.size = CGSize(width: design.width * zoom, height: design.height * zoom)
-        host.frame = box.bounds
-        box.addSubview(host)
-        box.host = host
-        LiveBoards.register(box, key: key)
+        host.frame = bounds
+        wantsLayer = true
+        addSubview(host)
+        self.host = host
         // The screen fills in its numbers just after it starts: the picture under it shows until then, so no flicker.
         host.alphaValue = 0
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak host] in host?.alphaValue = 1 }
-        return box
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak host] in
+            // A fade, because the old picture can differ a little from what the code draws now.
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.15
+                host?.animator().alphaValue = 1
+            }
+        }
     }
 
-    func updateNSView(_ box: Container, context: Context) {
-        guard box.design != design || box.zoom != zoom else { return }
-        box.design = design
-        box.zoom = zoom
-        box.frame.size = CGSize(width: design.width * zoom, height: design.height * zoom)
-        box.scale?.value = zoom
-        box.sharpen(zoom: zoom)
+    @available(*, unavailable) required init?(coder: NSCoder) { nil }
+
+    override var isFlipped: Bool { true }
+    /// Takes no input unless the canvas's press tool asks for it.
+    override func hitTest(_ point: NSPoint) -> NSView? { routing ? super.hitTest(point) : nil }
+
+    func pressTarget(inWindow spot: NSPoint) -> NSView? {
+        guard let superview else { return nil }
+        routing = true
+        defer { routing = false }
+        let target = super.hitTest(superview.convert(spot, from: nil))
+        if target != nil, let kind = NSApp.currentEvent?.type, [.leftMouseDown, .scrollWheel, .keyDown].contains(kind) {
+            LiveBoards.keptScreens[key] = self
+        }
+        return target
     }
 
-    final class Container: NSView, PressableBoard {
-        weak var host: NSView?
-        var key = ""
-        var scale: BoardZoom?
-        var design = CGSize.zero
-        var zoom: CGFloat = 0
-        private var drawn: CGFloat = 0
-        private var pending: DispatchWorkItem?
-        private var routing = false
+    func isTyping(_ responder: NSResponder?) -> Bool { responder is NSText }
 
-        override var isFlipped: Bool { true }
-        /// Takes no input unless the canvas's press tool asks for it.
-        override func hitTest(_ point: NSPoint) -> NSView? { routing ? super.hitTest(point) : nil }
+    /// Only called once the zoom has stopped.
+    func sharpen(zoom: CGFloat) {
+        apply((window?.backingScaleFactor ?? 2) * max(zoom, 1))
+    }
 
-        func pressTarget(inWindow spot: NSPoint) -> NSView? {
-            guard let superview else { return nil }
-            routing = true
-            defer { routing = false }
-            let target = super.hitTest(superview.convert(spot, from: nil))
-            if target != nil, let kind = NSApp.currentEvent?.type, [.leftMouseDown, .scrollWheel, .keyDown].contains(kind) {
-                LiveBoards.keptScreens[key] = self
-            }
-            return target
+    private func apply(_ scale: CGFloat) {
+        again?.cancel()
+        guard let root = host?.layer else { return }
+        drawn = scale
+        Self.walk(root, scale)
+        // Zoomed in, a screen adds layers as its data arrives, so keep the new ones sharp too.
+        guard scale > (window?.backingScaleFactor ?? 2) else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.window != nil else { return }
+            self.apply(self.drawn)
         }
+        again = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+    }
 
-        func isTyping(_ responder: NSResponder?) -> Bool { responder is NSText }
-
-        override func viewDidMoveToWindow() {
-            // A kept screen comes back with its layers at the screen's sharpness, and new layers wait for this.
-            if window != nil, zoom > 0 { sharpen(zoom: zoom) }
+    private static func walk(_ layer: CALayer, _ scale: CGFloat) {
+        // A photo's layer already holds its full picture, and asking it to redraw would leave it empty.
+        let isPhoto = String(describing: type(of: layer)) == "ImageLayer"
+        if !isPhoto, layer.contentsScale != scale {
+            layer.contentsScale = scale
+            layer.setNeedsDisplay()
         }
-
-        /// Redrawing is the slow part, so it waits until the zoom has settled for a moment.
-        func sharpen(zoom: CGFloat) {
-            let backing = (window?.backingScaleFactor ?? 2) * max(zoom, 1)
-            pending?.cancel()
-            let work = DispatchWorkItem { [weak self] in self?.apply(backing) }
-            pending = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
-        }
-
-        private func apply(_ scale: CGFloat) {
-            guard let root = host?.layer else { return }
-            drawn = scale
-            Self.walk(root, scale)
-            // Zoomed in, a screen adds layers as its data arrives, so keep the new ones sharp too.
-            guard scale > (window?.backingScaleFactor ?? 2) else { return }
-            let again = DispatchWorkItem { [weak self] in
-                guard let self, self.window != nil else { return }
-                self.apply(self.drawn)
-            }
-            pending = again
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: again)
-        }
-
-        private static func walk(_ layer: CALayer, _ scale: CGFloat) {
-            // A photo's layer already holds its full picture, and asking it to redraw would leave it empty.
-            let isPhoto = String(describing: type(of: layer)) == "ImageLayer"
-            if !isPhoto, layer.contentsScale != scale {
-                layer.contentsScale = scale
-                layer.setNeedsDisplay()
-            }
-            layer.sublayers?.forEach { walk($0, scale) }
-        }
+        layer.sublayers?.forEach { walk($0, scale) }
     }
 }
 
@@ -273,35 +250,23 @@ enum WebBoards {
     }
 }
 
-struct WebHost: NSViewRepresentable {
-    let key: String
-    let page: WebBoard
-    let design: CGSize
-    let zoom: CGFloat
-
-    func makeNSView(context: Context) -> WebBoardView {
-        let view = WebBoards.keptView(key) ?? WebBoardView(key: key, page: page, design: design, zoom: zoom)
-        LiveBoards.register(view, key: key)
-        return view
-    }
-
-    func updateNSView(_ view: WebBoardView, context: Context) { view.show(design: design, zoom: zoom) }
-}
-
-/// A web page at its design size. WebKit draws sharp only when it knows the zoom, but laying a page out again is slow and
-/// blanks it, so it is drawn at a few fixed sizes (1x, 2x, 4x, 8x) and every zoom in between is the nearest larger drawing
-/// stretched through the bounds. Crossing a size is the only slow step, and a snapshot covers the page while it happens.
-/// WKWebView's own magnification does not work here: the page just lays out wider. Web pages draw only in a real app
+/// A web page, at its design size for good: the camera does the enlarging. WebKit draws sharp only when it knows the zoom,
+/// and telling it means laying the page out again, which is slow and blanks it. So only after the zoom has stopped, and only
+/// when the zoom needs a different drawing size (1x, 2x, 4x, 8x), a real snapshot of the page covers it, the page redraws
+/// behind that, and the cover goes once the page has really drawn. Blank parts of a page show the picture underneath, never
+/// white. WKWebView's own magnification does not work here: the page just lays out wider. Web pages draw only in a real app
 /// bundle, so check this from a bundle, not the bare build.
 final class WebBoardView: NSView, PressableBoard, WKNavigationDelegate {
     private let key: String
     private let page: WebBoard
     private let web: WKWebView
-    private var design: CGSize
-    private var zoom: CGFloat
-    private var drawnAt: CGFloat
-    private var settling: DispatchWorkItem?
-    private var cover: NSImageView?
+    /// Shows the page's drawing size in the board's own size.
+    private let stretch = NSView()
+    private let cover = PictureView()
+    private let design: CGSize
+    private var drawnAt: CGFloat = 1
+    private var wanted: CGFloat = 1
+    private var redrawing = false
     private var retry: DispatchWorkItem?
     private var routing = false
     private var editing = false
@@ -326,28 +291,49 @@ final class WebBoardView: NSView, PressableBoard, WKNavigationDelegate {
     })();
     """
 
-    init(key: String, page: WebBoard, design: CGSize, zoom: CGFloat) {
+    /// With a mouse attached the Mac reserves 16 points for a page's scrollbar. Each redraw makes a page overflow for a moment,
+    /// a scrollbar appears, and centred content moves sideways by it until the next layout (measured: scrollWidth 1278 of
+    /// 1280 at 8x). A board is a picture of a screen, so its page shows no scrollbar of its own; scrolling still works.
+    private static let noBarScript = """
+    (function () {
+      const style = document.createElement('style');
+      style.textContent = 'html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }';
+      document.documentElement.appendChild(style);
+    })();
+    """
+
+    /// The page he left keeps its place; otherwise a new one starts.
+    static func make(key: String, page: WebBoard, design: CGSize) -> WebBoardView {
+        let board = WebBoards.keptView(key) ?? WebBoardView(key: key, page: page, design: design)
+        LiveBoards.register(board, key: key)
+        return board
+    }
+
+    private init(key: String, page: WebBoard, design: CGSize) {
         self.key = key
         self.page = page
         self.design = design
-        self.zoom = zoom
         let config = WKWebViewConfiguration()
         config.websiteDataStore = page.persistent == true ? .default() : .nonPersistent()
         let focus = Focus()
         config.userContentController.add(focus, name: "pinFocus")
         config.userContentController.addUserScript(WKUserScript(source: Self.focusScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        let level = Self.level(for: zoom)
-        drawnAt = level
-        web = WKWebView(frame: CGRect(x: 0, y: 0, width: design.width * level, height: design.height * level), configuration: config)
-        super.init(frame: CGRect(x: 0, y: 0, width: design.width * zoom, height: design.height * zoom))
-        setBoundsSize(web.frame.size)
+        config.userContentController.addUserScript(WKUserScript(source: Self.noBarScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        web = WKWebView(frame: CGRect(origin: .zero, size: design), configuration: config)
+        super.init(frame: CGRect(origin: .zero, size: design))
         focus.board = self
         wantsLayer = true
+        // Where a page has not drawn yet, the picture underneath shows instead of WebKit's white.
+        web.setValue(false, forKey: "drawsBackground")
         web.navigationDelegate = self
-        web.pageZoom = level
         // The picture under it shows until the page has really loaded, so an unreachable page simply stays a picture.
         web.alphaValue = 0
-        addSubview(web)
+        stretch.frame = bounds
+        stretch.addSubview(web)
+        addSubview(stretch)
+        cover.frame = bounds
+        cover.isHidden = true
+        addSubview(cover)
         load()
     }
 
@@ -371,45 +357,64 @@ final class WebBoardView: NSView, PressableBoard, WKNavigationDelegate {
 
     private static func level(for zoom: CGFloat) -> CGFloat { [1, 2, 4, 8].first { $0 >= zoom } ?? 8 }
 
-    func show(design: CGSize, zoom: CGFloat) {
-        guard design != self.design || zoom != self.zoom else { return }
-        let resized = design != self.design
-        self.design = design
-        self.zoom = zoom
-        frame.size = CGSize(width: design.width * zoom, height: design.height * zoom)
-        setBoundsSize(web.frame.size)
-        settling?.cancel()
-        guard resized || Self.level(for: zoom) != drawnAt else { return }
-        let work = DispatchWorkItem { [weak self] in self?.redraw() }
-        settling = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
-    }
-
-    /// Lays the page out at the size the zoom needs, showing a snapshot of the old drawing until the new one is up.
-    private func redraw() {
+    /// Only called once the zoom has stopped, for pages on screen.
+    func sharpen(zoom: CGFloat) {
+        wanted = Self.level(for: zoom)
+        guard loaded, !redrawing, wanted != drawnAt else { return }
+        redrawing = true
         let shot = WKSnapshotConfiguration()
         shot.snapshotWidth = NSNumber(value: Double(min(web.frame.width, 2880)))
         web.takeSnapshot(with: shot) { [weak self] image, _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                let level = Self.level(for: self.zoom)
-                let size = CGSize(width: self.design.width * level, height: self.design.height * level)
-                self.cover?.removeFromSuperview()
-                self.cover = nil
-                if let image {
-                    let cover = NSImageView(image: image)
-                    cover.imageScaling = .scaleAxesIndependently
-                    cover.frame = CGRect(origin: .zero, size: size)
-                    self.addSubview(cover)
-                    self.cover = cover
-                }
-                self.drawnAt = level
-                self.web.frame = CGRect(origin: .zero, size: size)
-                self.web.pageZoom = level
-                self.setBoundsSize(size)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self, cover = self.cover] in
-                    cover?.removeFromSuperview()
-                    if let self, self.cover === cover { self.cover = nil }
+                // No picture of the old drawing means nothing safe to hide behind: stay soft rather than risk showing white.
+                guard let image, let before = Likeness(image) else { self.redrawing = false; return }
+                self.redraw(behind: image, before: before)
+            }
+        }
+    }
+
+    private func redraw(behind image: NSImage, before: Likeness) {
+        cover.show(image)
+        cover.isHidden = false
+        CATransaction.flush()
+        let level = wanted, size = CGSize(width: design.width * level, height: design.height * level)
+        // Two changes, so the page lays out once in between. Always the narrower way: wider for a moment would shorten its
+        // scrolling parts and throw away where they were scrolled to (measured on Foundable's chat, 1 Nov 2026).
+        let growing = level > drawnAt
+        if growing { web.pageZoom = level }
+        web.frame = CGRect(origin: .zero, size: size)
+        if !growing { web.pageZoom = level }
+        stretch.setBoundsSize(size)
+        drawnAt = level
+        whenDrawn(like: before, tries: 15) { [weak self] in
+            guard let self else { return }
+            self.cover.isHidden = true
+            self.cover.clear()
+            self.redrawing = false
+            // He may have zoomed on while this ran.
+            if self.wanted != self.drawnAt { self.sharpen(zoom: self.wanted) }
+        }
+    }
+
+    /// Waits until the page has painted two frames and a fresh picture of it looks like the old one, then once more for
+    /// the screen to catch up. A page that really changed meanwhile ends the wait after a second and a half.
+    private func whenDrawn(like before: Likeness, tries: Int, done: @escaping @MainActor () -> Void) {
+        let finish = { DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { MainActor.assumeIsolated { done() } } }
+        web.callAsyncJavaScript("await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(1))))", in: nil, in: .page) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let small = WKSnapshotConfiguration()
+                small.snapshotWidth = NSNumber(value: Likeness.width)
+                self.web.takeSnapshot(with: small) { [weak self] image, _ in
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        if let image, Likeness(image)?.matches(before) == true { return finish() }
+                        guard tries > 0 else { return finish() }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                            MainActor.assumeIsolated { self?.whenDrawn(like: before, tries: tries - 1, done: done) }
+                        }
+                    }
                 }
             }
         }
@@ -446,7 +451,10 @@ final class WebBoardView: NSView, PressableBoard, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         loaded = true
-        web.alphaValue = 1
+        // Shown only once it has painted, so the page's first blank frame stays hidden.
+        web.callAsyncJavaScript("await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(1))))", in: nil, in: .page) { [weak self] _ in
+            MainActor.assumeIsolated { if self?.loaded == true { self?.web.alphaValue = 1 } }
+        }
         // Coming back into view should not mean loading the page again.
         WebBoards.keep(self, key: key)
     }
@@ -472,4 +480,31 @@ final class WebBoardView: NSView, PressableBoard, WKNavigationDelegate {
         web.evaluateJavaScript(script) { value, _ in MainActor.assumeIsolated { done(value) } }
     }
     var snapshotSource: WKWebView { web }
+}
+
+/// A tiny grey copy of a picture of a page, to tell whether two pictures show the same thing.
+private struct Likeness {
+    static let width = 64
+    private let values: [UInt8]
+
+    init?(_ image: NSImage) {
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil), cg.width > 0 else { return nil }
+        let height = max(cg.height * Self.width / cg.width, 1)
+        var pixels = [UInt8](repeating: 0, count: Self.width * height)
+        let made: Bool = pixels.withUnsafeMutableBytes { raw in
+            guard let context = CGContext(data: raw.baseAddress, width: Self.width, height: height, bitsPerComponent: 8, bytesPerRow: Self.width,
+                                          space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
+            context.interpolationQuality = .medium
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: Self.width, height: height))
+            return true
+        }
+        guard made else { return nil }
+        values = pixels
+    }
+
+    func matches(_ other: Likeness) -> Bool {
+        guard values.count == other.values.count else { return false }
+        let total = zip(values, other.values).reduce(0) { $0 + abs(Int($1.0) - Int($1.1)) }
+        return total / max(values.count, 1) < 6
+    }
 }
