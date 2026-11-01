@@ -93,6 +93,9 @@ struct Draft: Equatable {
         return out
     }
 
+    @ObservationIgnored private var glide: Timer?
+    @ObservationIgnored private var glideGoal: CGFloat = 1
+    @ObservationIgnored private var glideAnchor = CGPoint.zero
     private var reading = false
     private var ticks = 0
 
@@ -348,6 +351,27 @@ struct Draft: Equatable {
         let change = next / scale
         origin = CGPoint(x: anchor.x - (anchor.x - origin.x) * change, y: anchor.y - (anchor.y - origin.y) * change)
         scale = next
+    }
+
+    /// A wheel notch: heads for the new zoom over a few frames instead of snapping there. More notches just move the goal.
+    func glideZoom(by factor: CGFloat, at point: CGPoint) {
+        glideGoal = min(max((glide == nil ? scale : glideGoal) * factor, 0.05), 16)
+        glideAnchor = point
+        guard glide == nil else { return }
+        glide = Timer.scheduledTimer(withTimeInterval: 1.0 / 120, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.glideStep() }
+        }
+    }
+
+    private func glideStep() {
+        let left = glideGoal / scale
+        if abs(left - 1) < 0.002 {
+            zoom(by: left, at: glideAnchor)
+            glide?.invalidate()
+            glide = nil
+        } else {
+            zoom(by: pow(left, 0.15), at: glideAnchor)
+        }
     }
 
     func actualSize() { zoom(by: 1 / scale) }

@@ -274,7 +274,9 @@ struct CanvasEvents: NSViewRepresentable {
             MainActor.assumeIsolated {
                 guard let model else { return }
                 if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) {
-                    model.zoom(by: 1 + event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 0.01 : 0.05), at: here(event))
+                    let factor = CGFloat(ZoomStep.factor(delta: event.scrollingDeltaY, precise: event.hasPreciseScrollingDeltas))
+                    // A trackpad already sends small steps; a wheel's notches are glided between.
+                    if event.hasPreciseScrollingDeltas { model.zoom(by: factor, at: here(event)) } else { model.glideZoom(by: factor, at: here(event)) }
                 } else {
                     let speed: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 10
                     model.pan(event.scrollingDeltaX * speed, event.scrollingDeltaY * speed)

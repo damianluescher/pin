@@ -67,6 +67,17 @@ final class StoreTests: XCTestCase {
         XCTAssertThrowsError(try store.setPosition(app: "10", screen: "nope", x: 0, y: 0))
     }
 
+    func testZoomStepNeverJumps() {
+        for precise in [true, false] {
+            for delta in [-500.0, -25, -1, 1, 25, 500] {
+                let factor = ZoomStep.factor(delta: delta, precise: precise)
+                XCTAssertGreaterThan(factor, 0.7)
+                XCTAssertLessThan(factor, 1.4)
+                XCTAssertEqual(factor * ZoomStep.factor(delta: -delta, precise: precise), 1, accuracy: 0.0001)
+            }
+        }
+    }
+
     func testSlug() {
         XCTAssertEqual(Store.slug("Today · Good"), "today-good")
     }

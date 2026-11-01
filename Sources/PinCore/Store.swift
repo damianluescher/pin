@@ -381,3 +381,11 @@ public struct Store: Sendable {
         return d
     }()
 }
+
+/// How much one scroll event zooms. Multiplying by an exponent can never go negative, in and out mirror each other, and
+/// a fast flick of a wheel is capped, so no single event jumps.
+public enum ZoomStep {
+    public static func factor(delta: Double, precise: Bool) -> Double {
+        precise ? exp(max(min(delta, 40), -40) * 0.006) : exp(max(min(delta, 6), -6) * 0.05)
+    }
+}
