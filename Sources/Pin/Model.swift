@@ -11,7 +11,7 @@ struct Placed: Identifiable, Equatable {
     var id: String { "\(screen.id)-\(version.n)" }
 }
 
-enum Tool { case comment, move }
+enum Tool { case comment, move, press }
 
 /// What a new comment points at until it has its text.
 struct Draft: Equatable {
@@ -396,13 +396,24 @@ struct Draft: Equatable {
                          y: (viewport.height - box.rect.height * scale) / 2 - box.rect.minY * scale)
     }
 
-    /// A click on the canvas: a pin opens, a board takes a new comment, empty space closes what is open.
-    func click(at point: CGPoint) {
-        let visible = allThreads.filter { !$0.resolved || showResolved || $0.id == selected }
-        if let hit = visible.first(where: { thread in
+    /// The comment dot under the point, if one shows there.
+    func pin(at point: CGPoint) -> PinThread? {
+        allThreads.filter { !$0.resolved || showResolved || $0.id == selected }.first { thread in
             guard let pin = pinPoint(thread) else { return false }
             return hypot(pin.x - point.x, pin.y - point.y) <= 15
-        }) {
+        }
+    }
+
+    /// With the press tool: the view inside the running board at this point, or nil when the top board here is a
+    /// picture or there is no board, so the canvas takes it.
+    func pressTarget(at point: CGPoint, inWindow spot: NSPoint) -> NSView? {
+        guard tool == .press, let app, let box = placed.last(where: { onScreen($0.rect).contains(point) }) else { return nil }
+        return LiveBoards.running("\(app)/\(box.id)")?.pressTarget(inWindow: spot)
+    }
+
+    /// A click on the canvas: a pin opens, a board takes a new comment, empty space closes what is open.
+    func click(at point: CGPoint) {
+        if let hit = pin(at: point) {
             selected = hit.id
             draft = nil
             return

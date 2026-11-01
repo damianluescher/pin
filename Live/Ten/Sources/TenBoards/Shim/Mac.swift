@@ -102,4 +102,48 @@ extension View {
     func fullScreenCover<Content: View>(isPresented: Binding<Bool>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> Content) -> some View {
         overlay { if isPresented.wrappedValue { content() } }
     }
+
+    /// A Mac sheet would open on Pin's window and block the canvas: on a board it comes up inside the board.
+    /// The screens close themselves with the system's dismiss, which only works inside something presented: pushing
+    /// the content on its own small stack gives it that, and its dismiss pops this stack.
+    fileprivate func boardSheet<Item, Content: View>(item: Binding<Item?>, onDismiss: (() -> Void)?, @ViewBuilder content: @escaping (Item) -> Content) -> some View {
+        overlay {
+            if let value = item.wrappedValue {
+                BoardSheet(close: { item.wrappedValue = nil; onDismiss?() }) {
+                    NavigationStack {
+                        Color.clear.navigationDestination(isPresented: Binding(get: { item.wrappedValue != nil }, set: { if !$0 { item.wrappedValue = nil; onDismiss?() } })) {
+                            content(value)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Named by item type: a generic one has the same signature as the system's and the compiler cannot choose.
+// That also leaves `sheet(isPresented:)`, used only for Strap's device list: it stays a real Mac sheet with its Done button.
+extension View {
+    func sheet<Content: View>(item: Binding<Exercise?>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping (Exercise) -> Content) -> some View {
+        boardSheet(item: item, onDismiss: onDismiss, content: content)
+    }
+    func sheet<Content: View>(item: Binding<TenSleepDetailsView.Sheet?>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping (TenSleepDetailsView.Sheet) -> Content) -> some View {
+        boardSheet(item: item, onDismiss: onDismiss, content: content)
+    }
+}
+
+/// A phone sheet's shape: the screen dimmed behind it, a press there closes it.
+private struct BoardSheet<Content: View>: View {
+    let close: () -> Void
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Color.black.opacity(0.5).onTapGesture(perform: close)
+            content()
+                .background(TenColor.raised)
+                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16))
+                .padding(.top, 60)
+        }
+    }
 }

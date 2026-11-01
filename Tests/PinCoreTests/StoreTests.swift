@@ -80,4 +80,27 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(config.size(of: "run").height, 1105)
         XCTAssertEqual(config.size(of: "other").height, 852)
     }
+
+    func testWebBoardsAreReadAlongsideOldFieldsAndOnlyLocalPagesRun() throws {
+        let file = #"""
+        {"web":{"home":{"url":"http://localhost:3000/","width":1280,"height":800},
+                "page":{"url":"file:///tmp/a.html","width":390,"height":844,"persistent":true},
+                "away":{"url":"https://example.com/","width":100,"height":100},
+                "near":{"url":"http://localhost.example.com/","width":100,"height":100},
+                "flat":{"url":"http://localhost:3000/","width":0,"height":100}}}
+        """#
+        let config = try JSONDecoder().decode(LiveConfig.self, from: Data(file.utf8))
+        XCTAssertEqual(config.boards, [:])
+        XCTAssertEqual(config.size(of: "home").width, 1280)
+        XCTAssertEqual(config.size(of: "page").height, 844)
+        XCTAssertEqual(config.webBoard("page")?.persistent, true)
+        XCTAssertNil(config.webBoard("home")?.persistent)
+        for refused in ["away", "near", "flat", "missing"] { XCTAssertNil(config.webBoard(refused), refused) }
+        XCTAssertTrue(config.hasWeb)
+        let old = #"{"library":"x","size":{"width":393,"height":852},"boards":{"today":"Today"}}"#
+        let plain = try JSONDecoder().decode(LiveConfig.self, from: Data(old.utf8))
+        XCTAssertFalse(plain.hasWeb)
+        XCTAssertEqual(plain.library, "x")
+        XCTAssertEqual(plain.boards, ["today": "Today"])
+    }
 }

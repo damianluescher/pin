@@ -73,26 +73,34 @@ struct Canvas: View {
     private func boards(in size: CGSize) -> some View {
         let frame = CGRect(origin: .zero, size: size)
         let scale = model.scale
+        let pages = runningPages(in: frame)
         return ZStack(alignment: .topLeading) {
             ForEach(model.placed) { item in
                 let rect = model.onScreen(item.rect)
                 if rect.insetBy(dx: -40, dy: -40).intersects(frame) {
                     // A live board always keeps its picture underneath: small, or still starting, that is what shows.
                     let live = model.app.flatMap { app in
-                        LiveBoards.size(app: app, screen: item.screen.id, store: model.store) != nil && LiveBoards.runs("\(app)/\(item.screen.id)", shownAt: rect.width)
+                        LiveBoards.swiftBoard(app: app, screen: item.screen.id, store: model.store) && LiveBoards.runs("\(app)/\(item.screen.id)", shownAt: rect.width)
                             ? LiveBoards.view(app: app, screen: item.screen.id, store: model.store) : nil
                     }
+                    let key = "\(model.app ?? "")/\(item.id)"
+                    let page = pages.contains(key) ? model.app.flatMap { LiveBoards.web(app: $0, screen: item.screen.id, store: model.store) } : nil
                     if let image = model.image(item.screen, item.version, shownAt: rect.width) {
                         Image(nsImage: image).resizable().interpolation(.high)
                             .frame(width: rect.width, height: rect.height)
                             .position(x: rect.midX, y: rect.midY)
                         // Past 100% the picture runs out of detail, so the vector file takes over where there is one.
-                        if live == nil, scale > 1, let file = model.vectorFile(item.screen, item.version) {
+                        if live == nil, page == nil, scale > 1, let file = model.vectorFile(item.screen, item.version) {
                             VectorBoard(file: file, rect: rect, design: item.rect.size, frame: frame, zoom: scale)
                         }
                     }
                     if let live {
-                        LiveHost(view: live, design: item.rect.size, zoom: item.rect.width > 0 ? rect.width / item.rect.width : 1)
+                        LiveHost(key: key, view: live, design: item.rect.size, zoom: item.rect.width > 0 ? rect.width / item.rect.width : 1)
+                            .frame(width: rect.width, height: rect.height)
+                            .position(x: rect.midX, y: rect.midY)
+                    }
+                    if let page {
+                        WebHost(key: key, page: page, design: item.rect.size, zoom: item.rect.width > 0 ? rect.width / item.rect.width : 1)
                             .frame(width: rect.width, height: rect.height)
                             .position(x: rect.midX, y: rect.midY)
                     }
@@ -102,6 +110,18 @@ struct Canvas: View {
                 }
             }
         }
+    }
+
+    /// Which web boards may run now: on screen, at a usable size, and no more than the page cap.
+    /// An older version of a board stays its picture: the page is only ever the current code.
+    private func runningPages(in frame: CGRect) -> Set<String> {
+        guard let app = model.app, LiveBoards.hasWeb(app: app, store: model.store) else { return [] }
+        return WebBoards.choose(model.placed.compactMap { item in
+            let rect = model.onScreen(item.rect), key = "\(app)/\(item.id)"
+            guard item.version.n == item.screen.latest?.n, LiveBoards.web(app: app, screen: item.screen.id, store: model.store) != nil,
+                  rect.intersects(frame), LiveBoards.runs(key, shownAt: rect.width) else { return nil }
+            return (key, rect.intersection(frame).width * rect.intersection(frame).height)
+        })
     }
 
     private func label(_ item: Placed) -> String {
@@ -155,15 +175,25 @@ struct CanvasEvents: NSViewRepresentable {
     func makeNSView(context: Context) -> EventView {
         let view = EventView()
         view.model = model
-        // C comments; A and Esc go back to the cursor (Damian's keys, 1 Nov 2026). Not while he is typing in a field.
+        // C comments; A and Esc go back to the cursor; P presses (Damian, 1 Nov 2026). Not while he is typing in a field.
         view.keys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak view] event in
-            guard let view, let window = view.window, event.window == window, !(window.firstResponder is NSText) else { return event }
-            guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
+            guard let view, let window = view.window, event.window == window else { return event }
             return MainActor.assumeIsolated {
                 guard let model = view.model else { return event }
+                let isEsc = event.charactersIgnoringModifiers == "\u{1b}"
+                // Typing in a running board keeps every key, except Esc, which leaves the board.
+                if let board = LiveBoards.board(holding: window.firstResponder), board.isTyping(window.firstResponder) {
+                    guard isEsc else { return event }
+                    model.tool = .move
+                    window.makeFirstResponder(view)
+                    return nil
+                }
+                guard !(window.firstResponder is NSText) else { return event }
+                guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
                 switch event.charactersIgnoringModifiers?.lowercased() {
                 case "c": model.tool = .comment
                 case "a": model.tool = .move
+                case "p": model.tool = .press
                 case "\u{1b}":
                     model.tool = .move
                     model.selected = nil
@@ -191,7 +221,12 @@ struct CanvasEvents: NSViewRepresentable {
         weak var model: Model?
         var keys: Any?
         var tool = Tool.comment {
-            didSet { if tool != oldValue { window?.invalidateCursorRects(for: self) } }
+            didSet {
+                guard tool != oldValue else { return }
+                window?.invalidateCursorRects(for: self)
+                // Leaving press mode takes the keys back from a screen inside a board.
+                if tool != .press, let window, LiveBoards.board(holding: window.firstResponder) != nil { window.makeFirstResponder(self) }
+            }
         }
         private var pressed: NSPoint?
         private var dragged = false
@@ -208,7 +243,29 @@ struct CanvasEvents: NSViewRepresentable {
         }
         override var acceptsFirstResponder: Bool { true }
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-        override func resetCursorRects() { addCursorRect(bounds, cursor: tool == .comment ? .crosshair : .openHand) }
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: tool == .comment ? .crosshair : tool == .press ? .pointingHand : .openHand)
+        }
+
+        /// In press mode this view hands the input to the screen under the mouse, so it arrives the normal way:
+        /// buttons, scrolling, text fields and web pages then work as they do in any window. What stays with the
+        /// canvas: zooming, panning with the middle button, comment dots, and everywhere that is not a running board.
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard let own = super.hitTest(point) else { return nil }
+            return MainActor.assumeIsolated {
+                guard let model, model.tool == .press else { return own }
+                if let event = NSApp.currentEvent {
+                    switch event.type {
+                    case .magnify, .smartMagnify, .rotate, .otherMouseDown, .otherMouseDragged, .otherMouseUp: return own
+                    case .scrollWheel where !event.modifierFlags.intersection([.command, .control]).isEmpty: return own
+                    default: break
+                    }
+                }
+                let here = convert(point, from: superview)
+                guard model.pin(at: here) == nil else { return own }
+                return model.pressTarget(at: here, inWindow: convert(here, to: nil)) ?? own
+            }
+        }
         override func viewDidMoveToWindow() { window?.makeFirstResponder(self) }
 
         private func here(_ event: NSEvent) -> CGPoint { convert(event.locationInWindow, from: nil) }

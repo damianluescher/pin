@@ -13,24 +13,77 @@ public enum TenBoards {
         let world = BoardWorld()
         let (screen, tab) = world.state(name)
         let height = height(name)
+        // Starting a workout from a board needs these, as the app does at its root. A board that shows a session
+        // already has its screen, and asking now would open that session a second time.
+        let startsSessions = world.model.activeWorkout == nil
+        if startsSessions { world.session.attach(model: world.model, repo: world.repo, health: world.health, store: world.store) }
+        if let tab { world.shell.tab = tab }
         return AnyView(
-            screen
+            BoardFrame(screen: screen, home: tab, startsSessions: startsSessions, shell: world.shell, session: world.session)
                 .environmentObject(world.model).environmentObject(world.model.live).environmentObject(world.repo)
                 .environmentObject(world.profile).environmentObject(world.shell).environmentObject(world.alarm)
                 .environmentObject(world.session).environmentObject(world.health).environment(world.store)
                 .defaultAppStorage(BoardWorld.settings)
-                .safeAreaPadding(.top, TenLayout.headerTop)
-                .overlay(alignment: .bottom) {
-                    if let tab {
-                        TenTabBar(selection: .constant(tab)).padding(.bottom, TenTabBarMetrics.bottom)
-                    }
-                }
                 .overlay(alignment: .top) { PhoneStatusBar() }
                 .preferredColorScheme(.dark).tint(TenColor.white)
                 .frame(width: 393, height: height)
                 .background(TenColor.black)
                 .clipped()
         )
+    }
+}
+
+/// What the app's root does around a board: the tab bar really switches tab, each tab keeps its place under the others,
+/// and a started workout covers the board. Its own screen stands in for its tab's first page; the other tabs start when
+/// first opened, so a board holds no extra screens until they are pressed.
+private struct BoardFrame: View {
+    let screen: AnyView
+    let home: TenShell.Tab?
+    let startsSessions: Bool
+    @ObservedObject var shell: TenShell
+    @ObservedObject var session: TenSession
+    @State private var opened: Set<TenShell.Tab> = []
+
+    var body: some View {
+        Group {
+            if let home {
+                ZStack {
+                    TenColor.black
+                    ForEach(TenShell.Tab.allCases) { tab in
+                        if tab == home || tab == shell.tab || opened.contains(tab) {
+                            page(tab, home: home)
+                                .opacity(tab == shell.tab ? 1 : 0)
+                                .allowsHitTesting(tab == shell.tab)
+                                .safeAreaPadding(.top, TenLayout.headerTop)
+                        }
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    if shell.tabBarHiders == 0 {
+                        TenTabBar(selection: $shell.tab).padding(.bottom, TenTabBarMetrics.bottom)
+                    }
+                }
+                .onChange(of: shell.tab) { _, tab in opened.insert(tab) }
+            } else {
+                screen.safeAreaPadding(.top, TenLayout.headerTop)
+            }
+        }
+        .fullScreenCover(isPresented: startsSessions ? $session.isPresented : .constant(false)) {
+            TenSessionScreen()
+        }
+    }
+
+    @ViewBuilder private func page(_ tab: TenShell.Tab, home: TenShell.Tab) -> some View {
+        if tab == home {
+            screen
+        } else {
+            switch tab {
+            case .today: TenTodayView()
+            case .sleep: TenSleepView()
+            case .train: TenTrainView()
+            case .settings: TenSettingsRootView()
+            }
+        }
     }
 }
 

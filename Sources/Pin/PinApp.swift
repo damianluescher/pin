@@ -37,12 +37,16 @@ struct PinApp: App {
                         if env["PIN_BENCH"] != nil {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { Bench.run(model) }
                         }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                        // For checking: PIN_PRESS=1 presses real boards with real window events. See PressCheck.
+                        if env["PIN_PRESS"] != nil {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { PressCheck(model: model, folder: out).start() }
+                        }
+                        if env["PIN_PRESS"] == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
                             guard let frame = NSApp.windows.first(where: { $0.isVisible })?.contentView?.superview,
                                   let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else { return }
                             frame.cacheDisplay(in: frame.bounds, to: rep)
                             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out))
-                        }
+                        } }
                     }
                 }
         }
@@ -64,7 +68,46 @@ struct PinApp: App {
             CommandMenu("Tools") {
                 Button("Comment (C)") { model.tool = .comment }
                 Button("Cursor (A or Esc)") { model.tool = .move }
+                Button("Press (P)") { model.tool = .press }
             }
+        }
+    }
+}
+
+/// The split is AppKit's on purpose. A screen pushing inside a live board would otherwise push into SwiftUI's
+/// NavigationSplitView around it and replace the whole canvas (measured 1 Nov 2026).
+struct RootSplit: NSViewControllerRepresentable {
+    let sidebar: AnyView
+    let detail: AnyView
+
+    func makeNSViewController(context: Context) -> NSSplitViewController {
+        let split = NSSplitViewController()
+        let side = NSHostingController(rootView: sidebar), main = NSHostingController(rootView: detail)
+        side.sizingOptions = []
+        main.sizingOptions = []
+        let item = NSSplitViewItem(sidebarWithViewController: side)
+        item.minimumThickness = 230
+        item.maximumThickness = 320
+        split.addSplitViewItem(item)
+        split.addSplitViewItem(NSSplitViewItem(viewController: main))
+        return split
+    }
+
+    func updateNSViewController(_ split: NSSplitViewController, context: Context) {}
+}
+
+struct DetailColumn: View {
+    @Environment(Model.self) private var model
+    @AppStorage("showComments") private var showComments = true
+
+    var body: some View {
+        if model.app == nil {
+            ContentUnavailableView("No files yet", systemImage: "doc.on.doc", description: Text("Agents add screens with the pin command."))
+        } else {
+            Canvas()
+                .inspector(isPresented: $showComments) {
+                    CommentsPanel().inspectorColumnWidth(min: 260, ideal: 300, max: 400)
+                }
         }
     }
 }
@@ -75,23 +118,11 @@ struct RootView: View {
 
     var body: some View {
         @Bindable var model = model
-        NavigationSplitView {
-            SideList().navigationSplitViewColumnWidth(min: 180, ideal: 230, max: 320)
-        } detail: {
-            Group {
-                if model.app == nil {
-                    ContentUnavailableView("No files yet", systemImage: "doc.on.doc", description: Text("Agents add screens with the pin command."))
-                } else {
-                    Canvas()
-                        .inspector(isPresented: $showComments) {
-                            CommentsPanel().inspectorColumnWidth(min: 260, ideal: 300, max: 400)
-                        }
-                }
-            }
+        RootSplit(sidebar: AnyView(SideList().environment(model).preferredColorScheme(.dark)),
+                  detail: AnyView(DetailColumn().environment(model).preferredColorScheme(.dark)))
             .navigationTitle(model.app ?? "Pin")
             .navigationSubtitle(model.app == nil ? "" : model.page ?? "")
             .toolbar { tools }
-        }
         .overlay(alignment: .bottom) {
             if let failure = model.failure {
                 Text(failure).font(Style.body).padding(10)
@@ -103,11 +134,18 @@ struct RootView: View {
 
     @ToolbarContentBuilder private var tools: some ToolbarContent {
         @Bindable var model = model
+        ToolbarItem(placement: .navigation) {
+            Button { NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil) } label: {
+                Label("Sidebar", systemImage: "sidebar.left")
+            }
+            .help("Sidebar")
+        }
         if model.app != nil {
             ToolbarItem(placement: .principal) {
                 Picker("Tool", selection: $model.tool) {
                     Label("Cursor", systemImage: "cursorarrow").tag(Tool.move).help("Cursor (A or Esc)")
                     Label("Comment", systemImage: "text.bubble").tag(Tool.comment).help("Comment (C)")
+                    Label("Press", systemImage: "hand.point.up.left").tag(Tool.press).help("Press (P)")
                 }
                 .pickerStyle(.segmented).labelStyle(.iconOnly)
             }
@@ -251,5 +289,148 @@ enum Bench {
             print("frames per second \(Int(Double(sorted.count) / total * 1000)), typical \(Int(sorted[sorted.count / 2])) ms, worst \(Int(sorted.last ?? 0)) ms")
             fflush(stdout)
         }
+    }
+}
+
+/// `PIN_SHOT=FOLDER PIN_PRESS=1 Pin`: goes through press mode once with real window events and prints what happened.
+/// Pictures go to FOLDER. Needs PIN_HOME with app "10" and app "PressTest" (boards "page" and "gone", see the state card).
+@MainActor
+final class PressCheck {
+    let model: Model
+    let folder: String
+    private var steps: [(Double, () -> Void)] = []
+
+    init(model: Model, folder: String) {
+        self.model = model
+        self.folder = folder
+    }
+
+    private var window: NSWindow? { NSApp.windows.first { $0.isVisible && $0.contentView != nil } }
+
+    private func say(_ text: String) { print("PRESS", text); fflush(stdout) }
+
+    /// The window point of a spot on a board, given in the board's design units.
+    private func spot(_ item: Placed, _ x: CGFloat, _ y: CGFloat) -> NSPoint? {
+        guard let window, let canvas = eventView(in: window.contentView) else { return nil }
+        let p = model.onScreen(CGPoint(x: item.rect.minX + x, y: item.rect.minY + y))
+        return canvas.convert(p, to: nil)
+    }
+
+    private func eventView(in view: NSView?) -> NSView? {
+        guard let view else { return nil }
+        if view is CanvasEvents.EventView { return view }
+        for child in view.subviews { if let found = eventView(in: child) { return found } }
+        return nil
+    }
+
+    private func mouse(_ kind: NSEvent.EventType, _ at: NSPoint) {
+        guard let window, let event = NSEvent.mouseEvent(with: kind, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1) else { return }
+        NSApp.postEvent(event, atStart: false)
+    }
+
+    private func click(_ at: NSPoint?) {
+        guard let at else { return say("no spot") }
+        mouse(.leftMouseDown, at)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.mouse(.leftMouseUp, at) }
+    }
+
+    private func type(_ text: String) {
+        guard let window else { return }
+        for kind in [NSEvent.EventType.keyDown, .keyUp] {
+            if let event = NSEvent.keyEvent(with: kind, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: text, charactersIgnoringModifiers: text, isARepeat: false, keyCode: text == "\u{1b}" ? 53 : 0) {
+                NSApp.postEvent(event, atStart: false)
+            }
+        }
+    }
+
+    private func shoot(_ name: String) {
+        guard let frame = window?.contentView?.superview, let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else { return }
+        frame.cacheDisplay(in: frame.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: folder).appendingPathComponent(name + ".png"))
+    }
+
+    private func then(_ wait: Double = 0.8, _ work: @escaping () -> Void) { steps.append((wait, work)) }
+
+    private func run() {
+        guard !steps.isEmpty else { exit(0) }
+        let (wait, work) = steps.removeFirst()
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { MainActor.assumeIsolated { work(); self.run() } }
+    }
+
+    private func board(_ id: String) -> Placed? { model.placed.last { $0.screen.id == id } }
+    private func page(_ id: String) -> WebBoardView? { LiveBoards.running("PressTest/\(id)-1") as? WebBoardView }
+
+    func start() {
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+        let env = ProcessInfo.processInfo.environment
+        let swiftBoard = env["PIN_BOARD"] ?? "train", tabX = 322.0, tabY = 791.0
+        // Today's Sleep, Train and Settings tabs in one real board, at a zoom that is not 100%.
+        then(1) {
+            guard let item = self.board(swiftBoard) else { return self.say("no board \(swiftBoard)") }
+            self.model.reveal(item.screen)
+            self.model.zoom(by: 0.83 / self.model.scale, at: .zero)
+            self.model.tool = .press
+            self.say("zoom \(self.model.scale) tool press, window key \(self.window?.isKeyWindow ?? false)")
+        }
+        then(2.5) { self.shoot("1-before") }
+        then { if let item = self.board(swiftBoard) { self.click(self.spot(item, tabX, tabY)) } }
+        then(1.2) { self.shoot("2-settings-tab") }
+        then { if let item = self.board(swiftBoard) { self.click(self.spot(item, CGFloat(Double(env["PIN_ROW_X"] ?? "200") ?? 200), CGFloat(Double(env["PIN_ROW_Y"] ?? "230") ?? 230))) } }
+        then(1.2) { self.shoot("3-pushed") }
+        // Another tool: the same press must not reach the screen.
+        then { self.model.tool = .move }
+        then { if let item = self.board(swiftBoard) { self.click(self.spot(item, 72, tabY)) } }
+        then(1.0) { self.shoot("4-cursor-no-press") }
+        // Sharp at high zoom, and the press mapping does not care.
+        then { self.model.zoom(by: 4 / self.model.scale, at: .zero); if let item = self.board(swiftBoard) { self.model.origin = CGPoint(x: 20 - item.rect.minX * 4, y: 20 - item.rect.minY * 4) } }
+        then(2) { self.shoot("4b-zoom4") }
+        // Key: P comes back.
+        then { self.type("p") }
+        then { self.say("after P key tool press: \(self.model.tool == .press)") }
+        // The web board.
+        then { self.model.open("PressTest") }
+        then(1) {
+            guard let item = self.board("page") else { return self.say("no web board") }
+            self.model.reveal(item.screen)
+            self.model.zoom(by: 1.2 / self.model.scale, at: .zero)
+        }
+        then(2) {
+            self.say("web loaded \(self.page("page")?.loaded ?? false), unreachable board loaded \(self.page("gone")?.loaded ?? false)")
+            if let item = self.board("page") { self.click(self.spot(item, 150, 125)) }
+        }
+        then {
+            self.page("page")?.evaluate("document.title") { self.say("web press: \($0 ?? "nil") (design spot 150,125)") }
+            if let item = self.board("page") { self.click(self.spot(item, 120, 210)) }
+        }
+        then { self.say("first responder in board: \(LiveBoards.board(holding: self.window?.firstResponder) != nil)"); self.type("a") }
+        then { self.type("c") }
+        then {
+            self.say("while typing tool still press: \(self.model.tool == .press)")
+            self.page("page")?.evaluate("document.getElementById('i').value") { self.say("typed: \($0 ?? "nil")") }
+            self.type("\u{1b}")
+        }
+        then {
+            self.say("after synthetic Esc tool cursor: \(self.model.tool == .move)")
+            self.model.tool = .move
+            if let item = self.board("page") { self.click(self.spot(item, 150, 165)) }
+        }
+        then {
+            self.page("page")?.evaluate("window.lower ? 'pressed' : 'not pressed'") { self.say("cursor tool, page button: \($0 ?? "nil")") }
+            self.model.zoom(by: 6 / self.model.scale, at: .zero)
+            if let item = self.board("page") { self.model.origin = CGPoint(x: 40 - item.rect.minX * 6, y: 40 - item.rect.minY * 6) }
+        }
+        then(1.5) {
+            self.page("page")?.evaluate("'zoom 6: dpr ' + devicePixelRatio + ' layout width ' + innerWidth") { self.say("\($0 ?? "nil")") }
+            self.page("page")?.snapshotSource.takeSnapshot(with: nil) { image, _ in
+                MainActor.assumeIsolated {
+                    guard let data = image?.tiffRepresentation, let rep = NSBitmapImageRep(data: data) else { return self.say("no web picture") }
+                    try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: self.folder).appendingPathComponent("5-web-zoom6.png"))
+                    self.say("web picture \(rep.pixelsWide)x\(rep.pixelsHigh)")
+                }
+            }
+        }
+        then(1) { self.say("done"); exit(0) }
+        run()
     }
 }

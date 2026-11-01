@@ -71,7 +71,38 @@ public struct FlowEdge: Codable, Equatable, Hashable, Sendable {
     }
 }
 
-/// An app whose boards run live: the library built from its code, its screens' size, and board id -> screen name.
+/// A board whose real code is a web page. Only pages on this Mac: a file, or a server already running on localhost.
+public struct WebBoard: Codable, Equatable, Sendable {
+    public var url: String
+    public var width: Double
+    public var height: Double
+    /// Keep the page's cookies and storage between runs. Without this a board starts clean each time.
+    public var persistent: Bool?
+
+    public init(url: String, width: Double, height: Double, persistent: Bool? = nil) {
+        self.url = url
+        self.width = width
+        self.height = height
+        self.persistent = persistent
+    }
+
+    /// The page to open, or nil when the address is not allowed or the size is unusable: the board then stays a picture.
+    public var address: URL? {
+        guard width > 0, height > 0, let found = URL(string: url), Self.allows(found) else { return nil }
+        return found
+    }
+
+    public static func allows(_ url: URL) -> Bool {
+        switch url.scheme?.lowercased() {
+        case "file": return true
+        case "http": return ["localhost", "127.0.0.1", "::1"].contains(url.host?.lowercased() ?? "")
+        default: return false
+        }
+    }
+}
+
+/// An app whose boards run live. `library`, `size` and `boards` name screens built from its Swift code, by board id;
+/// `web` names boards that are web pages. An app may have either or both, so each part may be missing from the file.
 public struct LiveConfig: Codable, Equatable, Sendable {
     public struct Size: Codable, Equatable, Sendable {
         public var width: Double
@@ -82,8 +113,32 @@ public struct LiveConfig: Codable, Equatable, Sendable {
     /// A board that is not the usual size, by board id. Older files simply do not have this.
     public var sizes: [String: Size]?
     public var boards: [String: String]
+    /// Older files simply do not have this.
+    public var web: [String: WebBoard]?
 
-    public func size(of board: String) -> Size { sizes?[board] ?? size }
+    private enum CodingKeys: String, CodingKey { case library, size, sizes, boards, web }
+
+    public init(from decoder: Decoder) throws {
+        let file = try decoder.container(keyedBy: CodingKeys.self)
+        library = try file.decodeIfPresent(String.self, forKey: .library) ?? ""
+        size = try file.decodeIfPresent(Size.self, forKey: .size) ?? Size(width: 393, height: 852)
+        sizes = try file.decodeIfPresent([String: Size].self, forKey: .sizes)
+        boards = try file.decodeIfPresent([String: String].self, forKey: .boards) ?? [:]
+        web = try file.decodeIfPresent([String: WebBoard].self, forKey: .web)
+    }
+
+    public func size(of board: String) -> Size {
+        if let page = webBoard(board) { return Size(width: page.width, height: page.height) }
+        return sizes?[board] ?? size
+    }
+
+    /// The web page of this board, if it has one Pin may open.
+    public func webBoard(_ board: String) -> WebBoard? {
+        guard let page = web?[board], page.address != nil else { return nil }
+        return page
+    }
+
+    public var hasWeb: Bool { !(web ?? [:]).isEmpty }
 }
 
 public enum PinError: LocalizedError, Equatable {
