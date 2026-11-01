@@ -33,8 +33,8 @@ struct PinApp: App {
                 Toggle("Show All Versions", isOn: $model.showAllVersions)
             }
             CommandMenu("Tools") {
-                Button("Comment") { model.tool = .comment }.keyboardShortcut("c", modifiers: [.command, .shift])
-                Button("Move") { model.tool = .move }.keyboardShortcut("v", modifiers: [.command, .shift])
+                Button("Comment (C)") { model.tool = .comment }
+                Button("Cursor (A or Esc)") { model.tool = .move }
                 Divider()
                 Button("All Files") { model.closeFile() }.keyboardShortcut("[", modifiers: .command).disabled(model.app == nil)
             }

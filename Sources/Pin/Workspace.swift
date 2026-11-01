@@ -167,8 +167,8 @@ struct Canvas: View {
         return HStack {
             Spacer()
             HStack(spacing: 2) {
-                tool(.move, "cursorarrow", "Move")
-                tool(.comment, "text.bubble", "Comment")
+                tool(.move, "cursorarrow", "Cursor (A or Esc)")
+                tool(.comment, "text.bubble", "Comment (C)")
             }
             .padding(4)
             .background(Capsule().fill(Style.side))
@@ -211,7 +211,31 @@ struct CanvasEvents: NSViewRepresentable {
     func makeNSView(context: Context) -> EventView {
         let view = EventView()
         view.model = model
+        // C comments; A and Esc go back to the cursor (Damian's keys, 1 Nov 2026). Not while he is typing in a field.
+        view.keys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak view] event in
+            guard let view, let window = view.window, event.window == window, !(window.firstResponder is NSText) else { return event }
+            guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
+            return MainActor.assumeIsolated {
+                guard let model = view.model else { return event }
+                switch event.charactersIgnoringModifiers?.lowercased() {
+                case "c": model.tool = .comment
+                case "a": model.tool = .move
+                case "\u{1b}":
+                    model.tool = .move
+                    model.selected = nil
+                    model.draft = nil
+                case "=", "+": model.zoom(by: 1.25)
+                case "-": model.zoom(by: 0.8)
+                default: return event
+                }
+                return nil
+            }
+        }
         return view
+    }
+
+    static func dismantleNSView(_ view: EventView, coordinator: ()) {
+        if let keys = view.keys { NSEvent.removeMonitor(keys) }
     }
 
     func updateNSView(_ view: EventView, context: Context) {
@@ -221,6 +245,7 @@ struct CanvasEvents: NSViewRepresentable {
 
     final class EventView: NSView {
         weak var model: Model?
+        var keys: Any?
         var tool = Tool.comment {
             didSet { if tool != oldValue { window?.invalidateCursorRects(for: self) } }
         }
@@ -274,19 +299,6 @@ struct CanvasEvents: NSViewRepresentable {
             pressed = nil
         }
 
-        override func keyDown(with event: NSEvent) {
-            MainActor.assumeIsolated {
-                guard let model else { return }
-                switch event.charactersIgnoringModifiers {
-                case "c": model.tool = .comment
-                case "v": model.tool = .move
-                case "=", "+": model.zoom(by: 1.25)
-                case "-": model.zoom(by: 0.8)
-                case "\u{1b}": model.selected = nil; model.draft = nil
-                default: super.keyDown(with: event)
-                }
-            }
-        }
     }
 }
 
@@ -307,7 +319,7 @@ struct NewComment: View {
                     save()
                     return .handled
                 }
-                .onExitCommand { model.draft = nil }
+                .onExitCommand { model.draft = nil; model.tool = .move }
             HStack(spacing: Style.tight) {
                 Spacer()
                 Button("Cancel") { model.draft = nil }.buttonStyle(PlainPill())
@@ -379,7 +391,7 @@ struct ThreadBubble: View {
                     send()
                     return .handled
                 }
-                .onExitCommand { model.selected = nil }
+                .onExitCommand { model.selected = nil; model.tool = .move }
         }
         .background(RoundedRectangle(cornerRadius: Style.corner).fill(Style.bubble))
         .shadow(color: .black.opacity(0.5), radius: 16, y: 6)
