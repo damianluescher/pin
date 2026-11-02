@@ -195,6 +195,11 @@ private final class BoardWorld {
             model.live.connected = false
             return (AnyView(TenTodayView()), .today)
         case "Recovery": return (scores { TenRecoveryView(day: TenDay(), scores: $0) }, .today)
+        case "Strain":
+            let start = Int(Date().timeIntervalSince1970) - 60
+            repo.workouts = [WorkoutRow(startTs: start, endTs: start + 1560, sport: TenSession.planSport, source: "my-whoop", durationS: 1560, energyKcal: 280,
+                                        avgHr: 148, maxHr: 170, strain: Fixtures.effort(6.2), distanceM: nil, zonesJSON: nil, notes: nil, steps: nil)]
+            return (scores { TenStrainView(day: TenDay(), scores: $0) }, .today)
         case "Stress":
             repo.heartRate = Fixtures.heartRateDay()
             return (scores { TenStressView(day: TenDay(), scores: $0) }, .today)
