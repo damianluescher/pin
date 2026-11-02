@@ -1,8 +1,7 @@
 import SwiftUI
 
 /// New · A running app beside the chat, the way the Claude app has it (Damian, 2 Nov 2026: "you can even click through the simulation ... i want the same
-/// thing inside of wink"). A design for now: it lives here in Pin until he says yes, then it moves to wink2's App folder. In the real one the picture is
-/// the simulator's own screen, a click is a tap, a drag a swipe and his keys go to the app; here it shows a picture of the app.
+/// thing inside of wink"). Built: the real one is wink2's App/Preview.swift. In it the picture is the simulator's own screen; here it is a picture of the app, in the same phone.
 struct SimPane: View {
     enum State { case running, building, starting }
     var state = State.running
@@ -28,17 +27,14 @@ struct SimPane: View {
             .frame(height: Theme.bar)
             .padding(.top, 20)
             phone
-                .padding(.horizontal, 24).padding(.top, 8).padding(.bottom, 24)
+                .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
     private var phone: some View {
         ZStack {
-            if let image = NSImage(contentsOfFile: picture) {
-                Image(nsImage: image).resizable().scaledToFit()
-                    .opacity(state == .running ? 1 : 0.25)
-            }
+            PreviewPhone(chrome: .standard, picture: NSImage(contentsOfFile: picture), live: state == .running)
             if state != .running {
                 HStack(spacing: 8) {
                     WinkSpinner(size: 14)
@@ -46,10 +42,7 @@ struct SimPane: View {
                 }
             }
         }
-        .aspectRatio(402.0 / 874.0, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.screen, style: .continuous))
-        .padding(6)
-        .background(Color.black, in: RoundedRectangle(cornerRadius: Theme.Radius.screen + 6, style: .continuous))
+        .aspectRatio(PreviewChrome.standard.whole.width / PreviewChrome.standard.whole.height, contentMode: .fit)
     }
 }
 
