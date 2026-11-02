@@ -74,6 +74,8 @@ final class Repository: ObservableObject {
 @MainActor
 final class LiveState: ObservableObject {
     @Published var connected = true
+    @Published var bonded = true
+    @Published var bluetoothOff = false
     @Published var backfilling = false
     @Published var syncChunksThisSession = 0
     @Published var lastSyncedAt: TimeInterval? = Date().timeIntervalSince1970 - 120
@@ -115,6 +117,9 @@ final class AppModel: ObservableObject {
     func stopRealtimeHR() {}
     func applySmartAlarm() {}
     func scan(model: WhoopModel? = nil) {}
+    /// Pull to refresh does nothing on a board: it never touches a strap.
+    struct Strap { func syncNow() {} }
+    let ble = Strap()
     func importWhoop(url: URL) {}
     func isImporting(_ source: DataSourceImportKind) -> Bool { false }
     func importFailed(_ source: DataSourceImportKind) -> Bool { false }
