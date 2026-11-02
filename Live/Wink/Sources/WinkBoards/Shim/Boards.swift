@@ -3,7 +3,7 @@ import SwiftUI
 /// What Pin loads: Wink's real screens, by board name, each with its own model and made-up data. Nothing runs the engine.
 @MainActor
 enum WinkBoards {
-    private enum Frame { case mac, phone, drawer }
+    private enum Frame { case mac, phone, drawer, preview(SimPane.State), previewChip }
 
     private struct Spec {
         var frame = Frame.mac
@@ -19,6 +19,9 @@ enum WinkBoards {
     private static func spec(_ board: String) -> Spec {
         switch board {
         case "mac-start", "new-mac-side-list-with-agents": return Spec()
+        case "new-mac-preview-an-app": return Spec(frame: .preview(.running), chat: "plain")
+        case "new-mac-preview-building": return Spec(frame: .preview(.building), chat: "plain")
+        case "new-mac-preview-in-the-bar": return Spec(frame: .previewChip, chat: "plain")
         case "mac-chat": return Spec(chat: "penpot")
         case "mac-chat-sidebar-hidden": return Spec(chat: "penpot", setup: { $0.sideShut = true })
         case "mac-chat-with-steps-open": return Spec(chat: "steps", env: ["WINK_STEPS": "1"])
@@ -137,6 +140,12 @@ enum WinkBoards {
         switch frame {
         case .mac:
             Zoomed { Root().winkOverlays() }
+                .overlay(alignment: .topLeading) { WindowDots() }
+        case .preview(let state):
+            Zoomed { SimPaneBoard(state: state, picture: Fixtures.file("sim-app.png")).winkOverlays() }
+                .overlay(alignment: .topLeading) { WindowDots() }
+        case .previewChip:
+            Zoomed { SimChipBoard().winkOverlays() }
                 .overlay(alignment: .topLeading) { WindowDots() }
         case .phone:
             PhoneScreen().winkOverlays().coordinateSpace(.named(WinkZoom.space))
