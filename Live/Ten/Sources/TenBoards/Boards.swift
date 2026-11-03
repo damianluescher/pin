@@ -258,6 +258,7 @@ private final class BoardWorld {
             feedRoute(metres: 4861, seconds: 1600)
             return (AnyView(TenRunSessionView()), nil)
         case "Saved run": return (AnyView(TenSavedRunView(row: Fixtures.savedRun(), onClose: nil)), nil)
+        case "Choose workout": return (AnyView(TenChooseWorkoutView()), .train)
         case "Library": return (AnyView(TenLibraryView()), .train)
         case "Progress":
             trainWeek(Fixtures.longHistory())
