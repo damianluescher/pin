@@ -246,7 +246,20 @@ struct NewComment: View {
         .padding(12)
         .background(RoundedRectangle(cornerRadius: Style.corner).fill(Style.bubble))
         .shadow(color: .black.opacity(0.5), radius: 16, y: 6)
-        .onAppear { writing = true }
+        .onAppear { focusSoon() }
+    }
+
+    /// Ready to type the moment a comment is placed (Damian, 3 Nov 2026: "now i need to manually press it ... which is annoying").
+    /// The canvas still holds the keyboard from the click that placed the pin, so focusing on appear alone does nothing:
+    /// take the keyboard away from it and focus again a few frames later, until the field has it.
+    private func focusSoon() {
+        for delay in [0.0, 0.06, 0.18, 0.4] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard !writing else { return }
+                NSApp.keyWindow?.makeFirstResponder(nil)
+                writing = true
+            }
+        }
     }
 
     private var empty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
