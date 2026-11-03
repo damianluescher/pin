@@ -447,6 +447,12 @@ struct Draft: Equatable {
                                           y: (viewport.height - box.rect.height * zoom) / 2 - box.rect.minY * zoom))
     }
 
+    /// A board with a website link (his Inspo boards) shows that site live in the Run panel; other boards do nothing.
+    func openLink(_ screen: Screen) {
+        guard let app, let link = screen.link, let site = WebProject.site(link, title: screen.name) else { return }
+        run.show(site: site, app: app)
+    }
+
     /// The comment dot under the point, if one shows there.
     func pin(at point: CGPoint) -> PinThread? {
         allThreads.filter { !$0.resolved || showResolved || $0.id == selected }.first { thread in
@@ -470,6 +476,7 @@ struct Draft: Equatable {
             return
         }
         selected = nil
+        if tool == .move, let box = placed.last(where: { onScreen($0.rect).contains(point) }) { openLink(box.screen) }
         guard tool == .comment, let box = placed.last(where: { onScreen($0.rect).contains(point) }) else {
             draft = nil
             return

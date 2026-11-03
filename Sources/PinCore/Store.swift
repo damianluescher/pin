@@ -34,6 +34,8 @@ public struct Screen: Codable, Equatable, Identifiable, Sendable {
     public var page: String?
     /// Where the code of this screen is, for the agent that changes it.
     public var source: String?
+    /// The real website a picture board shows (an https link): clicking the board opens it in the Run panel.
+    public var link: String?
     public var versions: [Version]
     public var latest: Version? { versions.last }
     public var pageName: String { page ?? kind.title }

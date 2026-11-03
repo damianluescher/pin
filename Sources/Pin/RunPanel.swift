@@ -68,6 +68,15 @@ import WebKit
         running = nil
     }
 
+    /// A board's real website, live in the panel. The same site again only opens the panel.
+    func show(site: WebProject, app: String) {
+        if isOpen, case .web(let web) = running, web.project.kind == site.kind { return }
+        stop()
+        self.app = app
+        isOpen = true
+        running = .web(WebPreview(project: site))
+    }
+
     /// Typing goes to the running app, not to Pin's keys.
     static func owns(_ responder: NSResponder?) -> Bool {
         var view = responder as? NSView
@@ -122,7 +131,8 @@ struct RunPanel: View {
         case .web(let web):
             Text(web.project.name).font(Style.strong).foregroundStyle(Style.ink).lineLimit(1)
             if let address = web.address {
-                Text(verbatim: "\(address.host(percentEncoded: false) ?? ""):\(String(address.port ?? 80))").font(Style.small).lineLimit(1)
+                let host = address.host(percentEncoded: false) ?? ""
+                Text(verbatim: address.port.map { "\(host):\($0)" } ?? host).font(Style.small).lineLimit(1)
             }
         case nil:
             Text("Run").font(Style.strong).foregroundStyle(Style.ink)

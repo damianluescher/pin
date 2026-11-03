@@ -7,10 +7,18 @@ import WebKit
 // A dev server reloads by itself (hot reload); plain HTML reloads when a file changes. Closing the panel or quitting Pin stops the server.
 
 /// A web project: a folder with a package.json that has a dev or start script, or an index.html.
+/// Or a real website a picture board links to (3 Nov 2026: "maybe i can watch them inside of pin when i click on them"): https only, no server.
 struct WebProject: Hashable, Sendable {
-    enum Kind: Hashable, Sendable { case script(String), files }
+    enum Kind: Hashable, Sendable { case script(String), files, remote(URL) }
     let root: String
     let kind: Kind
+    var title: String? = nil
+
+    /// A board's website, when its link is a real https address.
+    static func site(_ link: String, title: String) -> WebProject? {
+        guard let url = URL(string: link), url.scheme?.lowercased() == "https", url.host != nil else { return nil }
+        return WebProject(root: link, kind: .remote(url), title: title)
+    }
 
     static func at(_ folder: String) -> WebProject? {
         var isFolder: ObjCBool = false
@@ -25,7 +33,7 @@ struct WebProject: Hashable, Sendable {
         return nil
     }
 
-    var name: String { (root as NSString).lastPathComponent }
+    var name: String { title ?? (root as NSString).lastPathComponent }
 }
 
 /// Its own class, so Pin's keys (C, A, P) leave typing in the page alone.
@@ -68,6 +76,7 @@ final class WebPreview {
     @ObservationIgnored private var watcher: Task<Void, Never>?
     @ObservationIgnored private var quitting: NSObjectProtocol?
     @ObservationIgnored private var started = false
+    @ObservationIgnored private var guardian: RemoteGuard?
 
     init(project: WebProject) {
         self.project = project
@@ -77,6 +86,12 @@ final class WebPreview {
         web = RunWebView(frame: .zero, configuration: setup)
         web.allowsBackForwardNavigationGestures = true
         web.setValue(false, forKey: "drawsBackground")
+        if case .remote = project.kind {
+            let guardian = RemoteGuard()
+            web.navigationDelegate = guardian
+            web.uiDelegate = guardian
+            self.guardian = guardian
+        }
         quitting = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.close() }
         }
@@ -126,12 +141,20 @@ final class WebPreview {
     }
 
     private func go() async {
+        if case .remote(let url) = project.kind {
+            address = url
+            state = .running
+            web.load(URLRequest(url: url))
+            await keepPicture(after: 8)
+            return
+        }
         let root = project.root
         let log = scratch.appendingPathComponent("server.log")
         FileManager.default.createFile(atPath: log.path, contents: nil)
         let port = Self.freePort()
         let command: String
         switch project.kind {
+        case .remote: return
         case .files:
             command = "exec /usr/bin/python3 -m http.server \(port) --bind 127.0.0.1"
         case .script(let script):
@@ -168,18 +191,21 @@ final class WebPreview {
                 state = .running
                 web.load(URLRequest(url: candidate))
                 if project.kind == .files { watch() }
-                // WINK_SNAPSHOT also keeps a picture of the page itself, which the window's picture cannot hold.
-                if let snapshot = ProcessInfo.processInfo.environment["PIN_SHOT"] {
-                    try? await Task.sleep(for: .seconds(2))
-                    if let image = try? await web.takeSnapshot(configuration: nil), let tiff = image.tiffRepresentation,
-                       let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-                        try? png.write(to: URL(fileURLWithPath: snapshot.replacingOccurrences(of: ".png", with: "-web.png")))
-                    }
-                }
+                await keepPicture(after: 2)
                 return
             }
         }
         state = .failed("The server did not answer in 90 seconds. " + Self.tail(log))
+    }
+
+    /// PIN_SHOT also keeps a picture of the page itself, which the window's picture cannot hold.
+    private func keepPicture(after seconds: Int) async {
+        guard let snapshot = ProcessInfo.processInfo.environment["PIN_SHOT"] else { return }
+        try? await Task.sleep(for: .seconds(seconds))
+        if let image = try? await web.takeSnapshot(configuration: nil), let tiff = image.tiffRepresentation,
+           let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+            try? png.write(to: URL(fileURLWithPath: snapshot.replacingOccurrences(of: ".png", with: "-web.png")))
+        }
     }
 
     /// Plain HTML has no hot reload: the page reloads when a file in the folder changes.
@@ -316,3 +342,18 @@ final class WebPreview {
     }
 }
 
+
+/// A linked website stays on https: other pages are not opened, and a link that opens a new window opens here instead.
+private final class RemoteGuard: NSObject, WKNavigationDelegate, WKUIDelegate {
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
+        let scheme = action.request.url?.scheme?.lowercased() ?? ""
+        let main = action.targetFrame?.isMainFrame ?? true
+        decisionHandler(scheme == "https" || (!main && ["about", "data", "blob"].contains(scheme)) ? .allow : .cancel)
+    }
+
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction,
+                 windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if action.request.url?.scheme?.lowercased() == "https" { webView.load(action.request) }
+        return nil
+    }
+}

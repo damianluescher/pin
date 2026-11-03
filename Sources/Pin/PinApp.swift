@@ -30,6 +30,8 @@ struct PinApp: App {
                                 model.run.open(app: app, store: model.store)
                                 if run != "1" { model.run.choose(folder: run, store: model.store) }
                             }
+                            // For checking: PIN_RUNLINK=<screen id> clicks that board's website open in the Run panel.
+                            if let id = env["PIN_RUNLINK"], let screen = model.screens.first(where: { $0.id == id }) { model.openLink(screen) }
                             if let zoom = env["PIN_ZOOM"].flatMap(Double.init) {
                                 model.zoom(by: zoom / model.scale, at: .zero)
                                 // PIN_X and PIN_Y are measured from the first board's corner, in screen points.
@@ -234,7 +236,7 @@ struct SideList: View {
                 }
                 Section("Boards") {
                     ForEach(model.pageScreens) { screen in
-                        Button { model.reveal(screen) } label: {
+                        Button { model.reveal(screen); model.openLink(screen) } label: {
                             Label {
                                 HStack {
                                     Text(screen.name).lineLimit(1)
