@@ -25,6 +25,11 @@ struct PinApp: App {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                             if let app = env["PIN_APP"] { model.open(app) }
                             if let page = env["PIN_PAGE"] { model.choose(page: page) }
+                            // For checking: PIN_RUN=1 opens the Run panel, PIN_RUN=<folder> runs that folder.
+                            if let run = env["PIN_RUN"], let app = model.app {
+                                model.run.open(app: app, store: model.store)
+                                if run != "1" { model.run.choose(folder: run, store: model.store) }
+                            }
                             if let zoom = env["PIN_ZOOM"].flatMap(Double.init) {
                                 model.zoom(by: zoom / model.scale, at: .zero)
                                 // PIN_X and PIN_Y are measured from the first board's corner, in screen points.
@@ -103,12 +108,21 @@ struct RootSplit: NSViewControllerRepresentable {
 struct DetailColumn: View {
     @Environment(Model.self) private var model
     @AppStorage("showComments") private var showComments = true
+    /// How wide he dragged the Run panel.
+    @AppStorage("runWidth") private var runWidth: Double = 480
 
     var body: some View {
         if model.app == nil {
             ContentUnavailableView("No files yet", systemImage: "doc.on.doc", description: Text("Agents add screens with the pin command."))
         } else {
-            Canvas()
+            HStack(spacing: 0) {
+                Canvas()
+                if model.run.isOpen {
+                    RunEdge(width: $runWidth, range: 300...1600)
+                    RunPanel(run: model.run).frame(width: runWidth)
+                }
+            }
+                .onChange(of: model.app) { model.run.follow(app: model.app, store: model.store) }
                 .inspector(isPresented: $showComments) {
                     CommentsPanel().inspectorColumnWidth(min: 260, ideal: 300, max: 400)
                 }
@@ -155,6 +169,12 @@ struct RootView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 ZoomMenu()
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button { if let app = model.app { model.run.toggle(app: app, store: model.store) } } label: {
+                    Label("Run", systemImage: model.run.isOpen ? "stop.fill" : "play.fill")
+                }
+                .help("Run the real app or website beside the canvas")
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { showComments.toggle() } label: { Label("Comments", systemImage: "sidebar.right") }.help("Comments")

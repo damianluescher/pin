@@ -16,6 +16,8 @@ pin resolve ID
 pin reopen ID
 pin comment APP SCREEN X Y TEXT [--version N] [--as NAME]     X and Y from 0 to 1
 pin capture web APP SCREEN URL [--size 1440x900] [--note TEXT]
+pin general APP TEXT [--as NAME]     a comment on the whole file, on no board
+pin run APP [FOLDER|--clear]     the folder whose iPhone app or website the Run panel starts
 pin capture sim APP SCREEN --bundle ID [--arg A]... [--wait SECONDS] [--note TEXT] [--source PATH]
 """
 
@@ -131,6 +133,11 @@ do {
             print(String(decoding: try encoder.encode(list), as: UTF8.self))
         } else {
             for t in list {
+                if t.screen == Store.general {
+                    print("\(t.id)  \(t.app) (whole file, on no board)\(t.resolved ? " (done)" : "")")
+                    for m in t.messages { print("  \(m.author): \(m.text)") }
+                    continue
+                }
                 let screen = try store.screen(app: t.app, id: t.screen)
                 let picture = screen.versions.first { $0.n == t.version }.map { store.picture(app: t.app, screen: t.screen, version: $0).path } ?? ""
                 print("\(t.id)  \(t.app)/\(t.screen) v\(t.version)\(t.version == screen.latest?.n ? "" : " (older version)")\(t.resolved ? " (done)" : "")  at \(Int(t.x * 100))% across, \(Int(t.y * 100))% down")
@@ -146,6 +153,19 @@ do {
         need(3)
         if let kind, Kind(rawValue: kind) == nil { fail("Kind is iphone, mac or web") }
         try addVersion(store, args[0], args[1], URL(fileURLWithPath: args[2]), kind: kind.flatMap(Kind.init(rawValue:)), note: note, source: source)
+    case "general":
+        let author = option("--as") ?? "Claude"
+        need(2)
+        let t = try store.addGeneralThread(app: args[0], text: args[1], author: author)
+        print(t.id)
+    case "run":
+        need(1)
+        if args.count == 1 {
+            print(store.runFolder(app: args[0]) ?? "none")
+        } else {
+            let folder = args[1] == "--clear" ? nil : (args[1] as NSString).expandingTildeInPath
+            try store.setRunFolder(app: args[0], folder: folder)
+        }
     case "place":
         need(4)
         guard let x = Double(args[2]), let y = Double(args[3]) else { fail("X and Y are numbers") }

@@ -22,6 +22,8 @@ struct Draft: Equatable {
 /// The app's state. Rereads the files every two seconds, so what an agent writes shows up by itself.
 @MainActor @Observable final class Model {
     let store = Store()
+    /// The file's real app or website beside the canvas (RunPanel.swift).
+    let run = RunPanelModel()
     var apps: [String] = []
     /// The open file; nil shows the files page.
     var app: String?
@@ -92,6 +94,7 @@ struct Draft: Equatable {
         do {
             out.screens = try store.screens(app: app)
             for screen in out.screens { out.threads[screen.id] = try store.threads(app: app, screen: screen.id) }
+            out.threads[Store.general] = try store.threads(app: app, screen: Store.general)
             out.flows = try store.flows(app: app)
             out.positions = try store.positions(app: app)
         } catch {
@@ -424,6 +427,8 @@ struct Draft: Equatable {
 
     /// Brings a comment into view and opens it, moving to its page when it sits on another one.
     func reveal(_ thread: PinThread) {
+        // A comment on the whole file sits on no board: it only opens.
+        if thread.screen == Store.general { selected = selected == thread.id ? nil : thread.id; draft = nil; return }
         if let name = screens.first(where: { $0.id == thread.screen })?.pageName, name != page { page = name; fit() }
         selected = thread.id
         draft = nil

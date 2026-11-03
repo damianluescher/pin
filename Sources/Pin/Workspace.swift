@@ -86,6 +86,8 @@ struct CanvasEvents: NSViewRepresentable {
                     return nil
                 }
                 guard !(window.firstResponder is NSText) else { return event }
+                // Keys typed into the Run panel's app or page are its own.
+                guard !RunPanelModel.owns(window.firstResponder) else { return event }
                 guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
                 switch event.charactersIgnoringModifiers?.lowercased() {
                 case "c": model.tool = .comment
@@ -333,19 +335,26 @@ struct CommentsPanel: View {
 
     var body: some View {
         @Bindable var model = model
-        let list = model.allThreads.filter { !$0.resolved || model.showResolved }
+        let shown = model.allThreads.filter { !$0.resolved || model.showResolved }
+        let general = shown.filter { $0.screen == Store.general }
+        let list = shown.filter { $0.screen != Store.general }
         let done = model.allThreads.filter(\.resolved).count
-        Group {
-            if list.isEmpty {
-                ContentUnavailableView("No comments", systemImage: "text.bubble", description: Text("Click a board to add one."))
-            } else {
-                ScrollView {
-                    VStack(spacing: 2) {
-                        ForEach(list) { thread in row(thread) }
-                    }
-                    .padding(8)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                // Comments on the whole file, on no board.
+                Text("Whole file").font(Style.small.weight(.semibold)).foregroundStyle(Style.grey).padding(.horizontal, 8).padding(.top, 4)
+                GeneralField()
+                ForEach(general) { thread in
+                    row(thread)
+                    if model.selected == thread.id { ThreadBubble(thread: thread).padding(.bottom, 8) }
                 }
+                Text("On boards").font(Style.small.weight(.semibold)).foregroundStyle(Style.grey).padding(.horizontal, 8).padding(.top, 16)
+                if list.isEmpty {
+                    Text("Click a board to add one.").font(Style.body).foregroundStyle(Style.grey).padding(8)
+                }
+                ForEach(list) { thread in row(thread) }
             }
+            .padding(8)
         }
         .safeAreaInset(edge: .bottom) {
             if done > 0 {
@@ -381,8 +390,32 @@ struct CommentsPanel: View {
     }
 
     private func detail(_ thread: PinThread) -> String {
-        let name = model.screens.first { $0.id == thread.screen }?.name ?? thread.screen
+        let name = thread.screen == Store.general ? "Whole file" : model.screens.first { $0.id == thread.screen }?.name ?? thread.screen
         let replies = thread.messages.count - 1
         return replies > 0 ? "\(name) · \(replies) \(replies == 1 ? "reply" : "replies")" : name
+    }
+}
+
+/// Writes a comment on the whole file: Return sends it, Shift-Return makes a new line.
+private struct GeneralField: View {
+    @Environment(Model.self) private var model
+    @State private var text = ""
+
+    var body: some View {
+        TextField("Comment on everything…", text: $text, axis: .vertical)
+            .textFieldStyle(.plain).font(Style.body).foregroundStyle(Style.ink).lineLimit(1...6)
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Style.raised))
+            .padding(.vertical, 4)
+            .onKeyPress(.return, phases: .down) { press in
+                if press.modifiers.contains(.shift) { return .ignored }
+                send()
+                return .handled
+            }
+    }
+
+    private func send() {
+        guard let app = model.app, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if model.change({ try $0.addGeneralThread(app: app, text: text, author: "Damian") }) != nil { text = "" }
     }
 }

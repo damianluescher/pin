@@ -176,8 +176,12 @@ public struct Store: Sendable {
         folders(in: home).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
+    /// The folder of a file's general comments: about everything, on no board (Damian, 3 Nov 2026: "there should be a overall comment section
+    /// ... that is regarding everythign"). It holds only `threads`, no screen.
+    public static let general = "_general"
+
     public func screens(app: String) throws -> [Screen] {
-        try folders(in: appURL(app)).map { try screen(app: app, id: $0) }
+        try folders(in: appURL(app)).filter { $0 != Self.general }.map { try screen(app: app, id: $0) }
             .sorted { ($0.order, $0.name) < ($1.order, $1.name) }
     }
 
@@ -258,6 +262,19 @@ public struct Store: Sendable {
         return thread
     }
 
+    /// A comment on the whole file, on no board.
+    @discardableResult
+    public func addGeneralThread(app: String, text: String, author: String) throws -> PinThread {
+        guard apps().contains(app) else { throw PinError.notFound(app) }
+        try FileManager.default.createDirectory(at: screenURL(app, Self.general).appendingPathComponent("threads"), withIntermediateDirectories: true)
+        let clean = try Self.clean(text)
+        let now = Date()
+        let thread = PinThread(id: Self.newID(), app: app, screen: Self.general, version: 0, x: 0, y: 0, resolved: false, created: now,
+                               messages: [Message(id: Self.newID(), author: author, text: clean, at: now)])
+        try save(thread)
+        return thread
+    }
+
     @discardableResult
     public func reply(thread id: String, text: String, author: String) throws -> PinThread {
         var found = try thread(id: id)
@@ -307,6 +324,23 @@ public struct Store: Sendable {
         let url = appURL(app).appendingPathComponent("live.json")
         guard let data = try? Data(contentsOf: url) else { return nil }
         return try? Self.decoder.decode(LiveConfig.self, from: data)
+    }
+
+    // MARK: Run panel
+
+    /// The folder whose app or website the Run panel starts for this file: `run.json` beside its screens, `{ "folder": "/path" }`.
+    public func runFolder(app: String) -> String? {
+        let url = appURL(app).appendingPathComponent("run.json")
+        guard let data = try? Data(contentsOf: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return (json["folder"] as? String).map { ($0 as NSString).expandingTildeInPath }
+    }
+
+    public func setRunFolder(app: String, folder: String?) throws {
+        let url = appURL(app).appendingPathComponent("run.json")
+        guard let folder else { try? FileManager.default.removeItem(at: url); return }
+        let data = try JSONSerialization.data(withJSONObject: ["folder": folder], options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: url, options: .atomic)
     }
 
     // MARK: Where boards sit
