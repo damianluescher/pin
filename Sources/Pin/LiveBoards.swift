@@ -70,6 +70,13 @@ enum LiveBoards {
 
     static func register(_ board: NSView & PressableBoard, key: String) { onCanvas[key] = Weak(board) }
 
+    /// Reloads every web board that is running or kept, for the toolbar's Refresh (Damian, 3 Nov: "refresh boards manually").
+    static func refreshWebBoards() {
+        var done = Set<ObjectIdentifier>()
+        for weak in onCanvas.values { if let web = weak.board as? WebBoardView, done.insert(ObjectIdentifier(web)).inserted { web.reloadPage() } }
+        for web in WebBoards.allKept() where done.insert(ObjectIdentifier(web)).inserted { web.reloadPage() }
+    }
+
     /// The running board with this key, when it is in the window right now.
     static func running(_ key: String) -> (NSView & PressableBoard)? {
         guard let board = onCanvas[key]?.board, board.window != nil else { return nil }
@@ -242,6 +249,7 @@ enum WebBoards {
     }
 
     static func keptView(_ key: String) -> WebBoardView? { kept.first { $0.key == key }?.view }
+    static func allKept() -> [WebBoardView] { kept.map(\.view) }
 
     static func keep(_ view: WebBoardView, key: String) {
         kept.removeAll { $0.key == key }
@@ -308,6 +316,9 @@ final class WebBoardView: NSView, PressableBoard, WKNavigationDelegate {
         LiveBoards.register(board, key: key)
         return board
     }
+
+    /// A fresh load from the server, skipping the cache; the picture underneath covers it until the page has drawn.
+    func reloadPage() { web.reloadFromOrigin() }
 
     private init(key: String, page: WebBoard, design: CGSize) {
         self.key = key

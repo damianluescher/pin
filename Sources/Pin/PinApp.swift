@@ -170,6 +170,11 @@ struct RootView: View {
                 .pickerStyle(.segmented).labelStyle(.iconOnly)
             }
             ToolbarItem(placement: .primaryAction) {
+                Button { model.reload(); LiveBoards.refreshWebBoards() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    .keyboardShortcut("r", modifiers: .command)
+                    .help("Refresh all boards (⌘R)")
+            }
+            ToolbarItem(placement: .primaryAction) {
                 ZoomMenu()
             }
             ToolbarItem(placement: .primaryAction) {
