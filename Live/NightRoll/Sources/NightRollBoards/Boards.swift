@@ -31,13 +31,14 @@ public enum NightRollBoards {
         Board(name: "Onboarding what it does", page: "First open", height: nil, col: 0, row: 0),
         Board(name: "Onboarding allow", page: "First open", height: nil, col: 1, row: 0),
         Board(name: "Onboarding lock", page: "First open", height: nil, col: 2, row: 0),
-        Board(name: "Onboarding lock Guided Access", page: "First open", height: nil, col: 2, row: 1),
+        Board(name: "Onboarding lock Screen Time (paid team)", page: "First open", height: nil, col: 2, row: 1),
         Board(name: "Start roll", page: "Start a roll", height: nil, col: 0, row: 0),
-        Board(name: "Start roll Guided Access", page: "Start a roll", height: nil, col: 0, row: 1),
+        Board(name: "Start roll Screen Time (paid team)", page: "Start a roll", height: nil, col: 0, row: 1),
         Board(name: "Look", page: "Start a roll", height: nil, col: 1, row: 0),
         Board(name: "Develop time", page: "Start a roll", height: nil, col: 1, row: 1),
         Board(name: "Open apps", page: "Start a roll", height: nil, col: 1, row: 2),
-        Board(name: "Camera fresh roll", page: "The night", height: nil, col: 0, row: 0),
+        Board(name: "Camera not locked yet", page: "The night", height: nil, col: 0, row: 0),
+        Board(name: "Camera fresh roll", page: "The night", height: nil, col: 0, row: 2),
         Board(name: "Camera mid roll", page: "The night", height: nil, col: 1, row: 0),
         Board(name: "Camera last shot", page: "The night", height: nil, col: 1, row: 1),
         Board(name: "Camera flash on", page: "The night", height: nil, col: 0, row: 1),
@@ -68,10 +69,10 @@ public enum NightRollBoards {
         Link(from: "onboarding-allow", label: "Next", to: "onboarding-lock"),
         Link(from: "onboarding-allow", label: "Camera not allowed", to: "camera-denied"),
         Link(from: "onboarding-allow", label: "Note not allowed", to: "notifications-denied"),
-        Link(from: "onboarding-lock", label: "Allow Screen Time", to: "rolls-empty"),
+        Link(from: "onboarding-lock", label: "Show me how", to: "guided-access-guide"),
         Link(from: "onboarding-lock", label: "Later", to: "rolls-empty", drawn: false),
-        Link(from: "onboarding-lock-guided-access", label: "Show me how", to: "guided-access-guide"),
-        Link(from: "onboarding-lock-guided-access", label: "Later", to: "rolls-empty", drawn: false),
+        Link(from: "onboarding-lock-screen-time-paid-team", label: "Allow Screen Time", to: "rolls-empty"),
+        Link(from: "onboarding-lock-screen-time-paid-team", label: "Later", to: "rolls-empty", drawn: false),
         Link(from: "rolls-empty", label: "Start a roll", to: "start-roll"),
         Link(from: "rolls", label: "Start a roll", to: "start-roll"),
         Link(from: "rolls", label: "Open a roll", to: "contact-sheet"),
@@ -81,11 +82,13 @@ public enum NightRollBoards {
         Link(from: "start-roll", label: "Look", to: "look"),
         Link(from: "start-roll", label: "Develops", to: "develop-time"),
         Link(from: "start-roll", label: "Open apps", to: "open-apps"),
-        Link(from: "start-roll", label: "Start roll", to: "camera-fresh-roll"),
+        Link(from: "start-roll", label: "Start roll", to: "camera-not-locked-yet"),
+        Link(from: "start-roll", label: "Lock", to: "guided-access-guide", drawn: false),
         Link(from: "start-roll", label: "No free roll left", to: "paywall"),
         Link(from: "start-roll", label: "Close", to: "rolls", drawn: false),
-        Link(from: "start-roll-guided-access", label: "Lock", to: "guided-access-guide"),
-        Link(from: "start-roll-guided-access", label: "Start roll", to: "camera-fresh-roll"),
+        Link(from: "start-roll-screen-time-paid-team", label: "Start roll", to: "camera-fresh-roll"),
+        Link(from: "camera-not-locked-yet", label: "Triple-click", to: "camera-fresh-roll"),
+        Link(from: "camera-not-locked-yet", label: "Lock", to: "guided-access-guide", drawn: false),
         Link(from: "look", label: "Done", to: "start-roll", drawn: false),
         Link(from: "develop-time", label: "Done", to: "start-roll", drawn: false),
         Link(from: "open-apps", label: "Done", to: "start-roll", drawn: false),
@@ -103,12 +106,13 @@ public enum NightRollBoards {
         Link(from: "contact-sheet", label: "Tap a frame", to: "photo"),
         Link(from: "contact-sheet", label: "Select", to: "save-and-share"),
         Link(from: "contact-sheet", label: "Save all", to: "rolls", drawn: false),
+        Link(from: "contact-sheet", label: "Close", to: "rolls", drawn: false),
         Link(from: "photo", label: "Save", to: "photo-saved"),
         Link(from: "photo", label: "Close", to: "contact-sheet", drawn: false),
         Link(from: "photo-saved", label: "Close", to: "contact-sheet", drawn: false),
         Link(from: "save-and-share", label: "Cancel", to: "contact-sheet", drawn: false),
         Link(from: "save-and-share", label: "Save", to: "rolls", drawn: false),
-        Link(from: "guided-access-guide", label: "Done", to: "start-roll-guided-access"),
+        Link(from: "guided-access-guide", label: "Done", to: "start-roll"),
         Link(from: "paywall", label: "Close", to: "start-roll", drawn: false),
     ]
 
@@ -186,7 +190,7 @@ private struct Host: View {
     init(start id: String) {
         _id = State(initialValue: id)
         _camera = State(initialValue: Self.camera(for: id))
-        _start = State(initialValue: Samples.startRoll(lock: id == "start-roll-guided-access" ? .guidedAccess : .screenTime))
+        _start = State(initialValue: Samples.startRoll(lock: id == "start-roll-screen-time-paid-team" ? .screenTime : .guidedAccess))
         _photo = State(initialValue: Samples.photo(saved: id == "photo-saved"))
         _onboarding = State(initialValue: Self.onboarding(for: id))
     }
@@ -203,13 +207,14 @@ private struct Host: View {
             camera = Self.camera(for: to)
             photo = Samples.photo(saved: to == "photo-saved")
             onboarding = Self.onboarding(for: to)
-            start = Samples.startRoll(lock: to == "start-roll-guided-access" ? .guidedAccess : start.lock == .guidedAccess ? .guidedAccess : .screenTime)
+            start = Samples.startRoll(lock: to == "start-roll-screen-time-paid-team" ? .screenTime : .guidedAccess)
             id = to
         }
     }
 
     private static func camera(for id: String) -> CameraState {
         switch id {
+        case "camera-not-locked-yet": Samples.camera(left: 24, lock: .unavailable)
         case "camera-fresh-roll": Samples.camera(left: 24)
         case "camera-last-shot": Samples.camera(left: 1)
         case "camera-flash-on": Samples.camera(left: 11, flash: true)
@@ -222,20 +227,20 @@ private struct Host: View {
         switch id {
         case "onboarding-allow": Samples.onboarding(.permissions)
         case "onboarding-lock": Samples.onboarding(.lock)
-        case "onboarding-lock-guided-access": Samples.onboarding(.lock, screenTime: false)
+        case "onboarding-lock-screen-time-paid-team": Samples.onboarding(.lock, screenTime: true)
         default: Samples.onboarding(.intro)
         }
     }
 
     @ViewBuilder private var screen: some View {
         switch id {
-        case "onboarding-what-it-does", "onboarding-allow", "onboarding-lock", "onboarding-lock-guided-access":
+        case "onboarding-what-it-does", "onboarding-allow", "onboarding-lock", "onboarding-lock-screen-time-paid-team":
             OnboardingScreen(state: onboarding, onNext: { go("Next") },
                              onAllowCamera: { onboarding.cameraAllowed = true },
                              onAllowNotifications: { onboarding.notificationsAllowed = true },
                              onSetUpLock: { go(onboarding.screenTimeAvailable ? "Allow Screen Time" : "Show me how") },
                              onLater: { go("Later") })
-        case "start-roll", "start-roll-guided-access":
+        case "start-roll", "start-roll-screen-time-paid-team":
             StartRollScreen(state: start, onShots: { start.shots = $0 }, onLook: { go("Look") },
                             onDevelop: { go("Develops") }, onApps: { go("Open apps") }, onLockHelp: { go("Lock") },
                             onClose: { go("Close") }, onStart: { go("Start roll") })
@@ -247,13 +252,16 @@ private struct Host: View {
             AllowedAppsScreen(state: apps, onToggle: { appID, on in
                 if let i = apps.apps.firstIndex(where: { $0.id == appID }) { apps.apps[i].isOn = on }
             }, onDone: { go("Done") })
-        case "camera-fresh-roll", "camera-mid-roll", "camera-last-shot", "camera-flash-on", "camera-hold-to-end":
+        case "camera-not-locked-yet", "camera-fresh-roll", "camera-mid-roll", "camera-last-shot", "camera-flash-on",
+             "camera-hold-to-end":
             CameraScreen(state: camera) { Viewfinder() } onShutter: {
                 if camera.shotsLeft <= 1 { go("Last shot") } else { camera.shotsLeft -= 1 }
             } onFlash: {
                 camera.flashOn.toggle()
             } onEndEarly: {
                 id = "camera-hold-to-end"; go("3 seconds")
+            } onLockInfo: {
+                go("Lock")
             }
         case "end-early":
             EndEarlyScreen(state: Samples.endEarly) {
@@ -268,7 +276,7 @@ private struct Host: View {
                 .onTapGesture { go("Developed") }
         case "contact-sheet":
             ContactSheetScreen(state: Samples.contactSheet, onOpen: { frame in go("Tap a frame"); photo = Samples.photo(frame) },
-                               onSelect: { go("Select") }, onSaveAll: { go("Save all") })
+                               onSelect: { go("Select") }, onSaveAll: { go("Save all") }, onClose: { go("Close") })
         case "photo", "photo-saved":
             PhotoScreen(state: photo, onClose: { go("Close") },
                         onPrevious: { if photo.photo.id > 1 { photo = Samples.photo(photo.photo.id - 1) } },

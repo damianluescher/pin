@@ -29,7 +29,7 @@ positions_path = os.path.join(folder, "positions.json")
 for order, b in enumerate(boards):
     picture = os.path.join(shots, "x2" if wide(b) else "x3", b["id"] + ".png")
     screen_dir = os.path.join(folder, b["id"])
-    source = "App/UI (Night Roll design worktree), board \"%s\" in Live/NightRoll/Boards.swift" % b["name"]
+    source = "App/UI (~/tools/nightroll, main), board \"%s\" in Live/NightRoll/Boards.swift" % b["name"]
     if not os.path.isdir(screen_dir):
         subprocess.check_call(["pin", "add", app, b["name"], picture, "--kind", "mac" if wide(b) else "iphone",
                                "--page", b["page"], "--source", source], env=env, stdout=subprocess.DEVNULL)
