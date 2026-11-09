@@ -35,6 +35,10 @@ public enum LUTCamBoards {
         Board(name: "How it works", page: "First open", width: 393, height: 852),
         Board(name: "Camera not allowed", page: "First open", width: 393, height: 852),
         Board(name: "Photos not allowed", page: "First open", width: 393, height: 852),
+        Board(name: "Edit look", page: "After the shot", width: 393, height: 852),
+        Board(name: "Edit exposure", page: "After the shot", width: 393, height: 852),
+        Board(name: "Edit white balance", page: "After the shot", width: 393, height: 852),
+        Board(name: "Edit format", page: "After the shot", width: 393, height: 852),
         Board(name: "Quick review", page: "After the shot", width: 393, height: 852),
         Board(name: "Gallery", page: "After the shot", width: 393, height: 852),
         Board(name: "Gallery empty", page: "After the shot", width: 393, height: 852),
@@ -83,6 +87,10 @@ public enum LUTCamBoards {
         case "How it works": return AnyView(Phone { HowItWorksScreen() })
         case "Camera not allowed": return AnyView(Phone { DeniedScreen() })
         case "Photos not allowed": return AnyView(Phone { DeniedScreen(photos: true) })
+        case "Edit look": return AnyView(Phone { PhotoEditBoard(tool: .look) })
+        case "Edit exposure": return AnyView(Phone { PhotoEditBoard(tool: .exposure) })
+        case "Edit white balance": return AnyView(Phone { PhotoEditBoard(tool: .white) })
+        case "Edit format": return AnyView(Phone { PhotoEditBoard(tool: .format) })
         case "Quick review": return AnyView(Phone { QuickReviewScreen() })
         case "Gallery": return AnyView(Phone { GalleryScreen() })
         case "Gallery empty": return AnyView(Phone { GalleryScreen(empty: true) })
