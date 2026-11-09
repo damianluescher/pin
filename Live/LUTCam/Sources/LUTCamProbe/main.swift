@@ -8,6 +8,7 @@ import LUTCamBoards
 let args = CommandLine.arguments.dropFirst()
 MainActor.assumeIsolated {
     LUTCamBoards.stillRender()
+    if args.first == "cans", let folder = args.dropFirst().first { CanRender.run(folder); return }
     guard args.first == "render", let folder = args.dropFirst().first else { print("LUTCamProbe render FOLDER [SCALE]"); return }
     let scale = args.dropFirst(2).first.flatMap(Double.init) ?? 2
     let out = URL(fileURLWithPath: folder, isDirectory: true)

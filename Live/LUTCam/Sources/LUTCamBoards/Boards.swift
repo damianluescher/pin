@@ -172,3 +172,11 @@ struct LockScreenBoard: View {
         Image(systemName: s).font(.system(size: 20)).foregroundStyle(.white).frame(width: 50, height: 50).background(Circle().fill(Color.black.opacity(0.35)))
     }
 }
+
+// For LUTCamProbe cans: every film stock's flat 4Roll drawing without the light (the 3D render lights it).
+extension LUTCamBoards {
+    @MainActor public static var flatCans: [(String, AnyView)] {
+        [("pure", CanStock.pure), ("portra", .portra), ("gold", .gold), ("ektar", .ektar), ("vision", .vision)]
+            .map { ($0.0, AnyView(Canister(stock: $0.1, flat: true))) }
+    }
+}
