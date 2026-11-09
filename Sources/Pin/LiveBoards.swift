@@ -278,10 +278,16 @@ final class SwiftBoardView: NSView, PressableBoard {
 
     private static func walk(_ layer: CALayer, _ scale: CGFloat) {
         // A photo's layer already holds its full picture, and asking it to redraw would leave it empty.
-        let isPhoto = String(describing: type(of: layer)) == "ImageLayer"
-        if !isPhoto, layer.contentsScale != scale {
+        // SwiftUI's Canvas/shape layers (RenderBox) go blank the same way when told to redraw from outside
+        // (Damian, 9 Nov 2026: the LUT Cam ruler's ticks vanished on zoom); they only get the new scale.
+        let kind = String(describing: type(of: layer))
+        let isPhoto = kind == "ImageLayer"
+        let isRenderBox = kind.hasPrefix("RB")
+        if kind == "RBSurfaceContentsLayer" {
+            // drawn by its parent; leave it alone
+        } else if !isPhoto, layer.contentsScale != scale {
             layer.contentsScale = scale
-            layer.setNeedsDisplay()
+            if !isRenderBox { layer.setNeedsDisplay() }
         }
         layer.sublayers?.forEach { walk($0, scale) }
     }
