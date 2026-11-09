@@ -17,6 +17,7 @@ public enum LUTCamBoards {
         Board(name: "Format 6x6", page: "Camera", width: 393, height: 852),
         Board(name: "Format XPan", page: "Camera", width: 393, height: 852),
         Board(name: "Exposure", page: "Camera", width: 393, height: 852),
+        Board(name: "Grid", page: "Camera", width: 393, height: 852),
         Board(name: "Focus lock", page: "Camera", width: 393, height: 852),
         Board(name: "Lenses", page: "Camera", width: 393, height: 852),
         Board(name: "Lens without unprocessed", page: "Camera", width: 393, height: 852),
@@ -61,6 +62,7 @@ public enum LUTCamBoards {
         case "Format 6x6": return AnyView(Phone { FormatState(format: .square) })
         case "Format XPan": return AnyView(Phone { FormatState(format: .pano) })
         case "Exposure": return AnyView(Phone { ExposureState() })
+        case "Grid": return AnyView(Phone { GridState() })
         case "Focus lock": return AnyView(Phone { FocusLockState() })
         case "Lenses": return AnyView(Phone { LensState() })
         case "Lens without unprocessed": return AnyView(Phone { LensState(noRaw: true) })
