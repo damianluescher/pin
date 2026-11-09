@@ -12,11 +12,11 @@ struct PhotoEditBoard: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Cancel").font(LC.Page.body).foregroundStyle(LC.Colour.secondary)
+                Text("Cancel").font(LC.Text.body).foregroundStyle(LC.Colour.secondary)
                 Spacer()
-                Text("Edit").font(LC.Page.bodyStrong).foregroundStyle(LC.Colour.primary)
+                Text("Edit").font(LC.Text.bodyStrong).foregroundStyle(LC.Colour.primary)
                 Spacer()
-                Text("Save").font(LC.Page.bodyStrong).foregroundStyle(LC.Colour.primary)
+                Text("Save").font(LC.Text.bodyStrong).foregroundStyle(LC.Colour.primary)
             }
             .padding(.top, LC.Space.s)
             picture.padding(.top, LC.Space.m)
@@ -39,7 +39,7 @@ struct PhotoEditBoard: View {
         .frame(height: 470)
         .clipShape(RoundedRectangle(cornerRadius: LC.Radius.viewfinder, style: .continuous))
         .overlay(alignment: .bottomLeading) {
-            Text("Portra 400").font(LC.Page.caption).foregroundStyle(.white)
+            Text("Portra 400").font(LC.Text.label).foregroundStyle(.white)
                 .padding(.horizontal, LC.Space.s).frame(height: 26)
                 .background(Capsule().fill(Color.black.opacity(0.5))).padding(LC.Space.m)
         }
@@ -55,9 +55,9 @@ struct PhotoEditBoard: View {
             VStack(spacing: LC.Space.m) {
                 dial(value: "5 600 K", note: nil)
                 HStack {
-                    Text("Tint").font(LC.Page.caption).foregroundStyle(LC.Colour.secondary)
+                    Text("Tint").font(LC.Text.label).foregroundStyle(LC.Colour.secondary)
                     Spacer()
-                    Text("+4").font(LC.Text.value).foregroundStyle(LC.Colour.primary)
+                    Text("+4").font(LC.Text.mono).foregroundStyle(LC.Colour.primary)
                 }
                 HStack(spacing: LC.Space.s) {
                     chip("As shot", on: false); chip("Daylight", on: true); chip("Cloudy", on: false); chip("Tungsten", on: false)
@@ -68,21 +68,21 @@ struct PhotoEditBoard: View {
                 HStack(spacing: LC.Space.xs) {
                     ForEach(FilmFormat.allCases, id: \.self) { f in chip(f.rawValue, on: f == .f35) }
                 }
-                Text("Drag the picture to place the crop").font(LC.Page.caption).foregroundStyle(LC.Colour.secondary)
+                Text("Drag the picture to place the crop").font(LC.Text.label).foregroundStyle(LC.Colour.secondary)
             }
         }
     }
 
     private func dial(value: String, note: String?) -> some View {
         VStack(spacing: LC.Space.s) {
-            Text(value).font(LC.Text.value).foregroundStyle(LC.Colour.accent)
+            Text(value).font(LC.Text.mono).foregroundStyle(LC.Colour.accent)
             Ruler().frame(height: LC.Size.ruler)
-            if let note { Text(note).font(LC.Page.caption).foregroundStyle(LC.Colour.secondary) }
+            if let note { Text(note).font(LC.Text.label).foregroundStyle(LC.Colour.secondary) }
         }
     }
 
     private func chip(_ t: String, on: Bool) -> some View {
-        Text(t).font(LC.Page.caption).lineLimit(1).fixedSize()
+        Text(t).font(LC.Text.label).lineLimit(1).fixedSize()
             .foregroundStyle(on ? Color.black : LC.Colour.primary)
             .padding(.horizontal, LC.Space.s + 2).frame(height: 32)
             .background(Capsule().fill(on ? Color.white : LC.Colour.card))
@@ -93,7 +93,7 @@ struct PhotoEditBoard: View {
             ForEach(EditTool.allCases, id: \.self) { t in
                 VStack(spacing: 6) {
                     Image(systemName: icon(t)).font(.system(size: 20, weight: .medium))
-                    Text(t.rawValue).font(LC.Page.caption).lineLimit(1).fixedSize()
+                    Text(t.rawValue).font(LC.Text.label).lineLimit(1).fixedSize()
                 }
                 .foregroundStyle(t == tool ? LC.Colour.primary : LC.Colour.secondary)
                 .frame(maxWidth: .infinity)

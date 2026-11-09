@@ -46,7 +46,6 @@ public enum LUTCamBoards {
         Board(name: "Photo held (unprocessed)", page: "After the shot", width: 393, height: 852),
         Board(name: "Photo info", page: "After the shot", width: 393, height: 852),
         Board(name: "Looks", page: "Looks and settings", width: 393, height: 852),
-        Board(name: "Import a look", page: "Looks and settings", width: 393, height: 852),
         Board(name: "Settings", page: "Looks and settings", width: 393, height: 852),
         Board(name: "Unlock", page: "Unlock", width: 393, height: 852),
         Board(name: "Lock Screen", page: "Outside the app", width: 393, height: 852),
@@ -98,7 +97,6 @@ public enum LUTCamBoards {
         case "Photo held (unprocessed)": return AnyView(Phone { PhotoViewScreen(holding: true) })
         case "Photo info": return AnyView(Phone { PhotoInfoScreen() })
         case "Looks": return AnyView(Phone { MyLooksScreen() })
-        case "Import a look": return AnyView(Phone { ImportLookScreen() })
         case "Settings": return AnyView(Phone { SettingsScreen() })
         case "Unlock": return AnyView(Phone { UnlockScreen() })
         case "Lock Screen": return AnyView(LockScreenBoard().environment(\.colorScheme, .dark))
@@ -142,5 +140,35 @@ public func pinBoard(_ name: UnsafePointer<CChar>) -> UnsafeMutableRawPointer {
         let view = UnsafeMutablePointer<AnyView>.allocate(capacity: 1)
         view.initialize(to: LUTCamBoards.board(String(cString: name)))
         return UnsafeMutableRawPointer(view)
+    }
+}
+
+// A mock of the iPhone Lock Screen (system UI, drawn with iOS's own sizes; not part of the app).
+/// 24. Outside the app: the Lock Screen camera button opens LUT Cam; the Camera Control button changes exposure.
+struct LockScreenBoard: View {
+    var body: some View {
+        ZStack {
+            Fill(image: Sample.photo(5)).overlay(Color.black.opacity(0.25))
+            VStack(spacing: 0) {
+                Text("Monday 9 November").font(.system(size: 20, weight: .semibold)).foregroundStyle(.white).padding(.top, 70)
+                Text("9:41").font(.system(size: 96, weight: .bold)).foregroundStyle(.white)
+                Spacer()
+                HStack {
+                    lockButton("flashlight.off.fill")
+                    Spacer()
+                    ZStack {
+                        Circle().fill(Color.black.opacity(0.35)).frame(width: 50, height: 50)
+                        Image(systemName: "camera.aperture").font(.system(size: 22, weight: .medium)).foregroundStyle(.white)
+                    }
+                }
+                .padding(.horizontal, 44)
+                .padding(.bottom, 44)
+            }
+        }
+        .frame(width: 393, height: 852)
+        .clipped()
+    }
+    private func lockButton(_ s: String) -> some View {
+        Image(systemName: s).font(.system(size: 20)).foregroundStyle(.white).frame(width: 50, height: 50).background(Circle().fill(Color.black.opacity(0.35)))
     }
 }

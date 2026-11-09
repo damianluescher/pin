@@ -101,7 +101,7 @@ struct IconOptionsBoard: View {
                         IconOptionView(option: o, side: 40)
                         IconOptionView(option: o, side: 29)
                     }
-                    Text(o.rawValue).font(LC.Page.headline).foregroundStyle(.white)
+                    Text(o.rawValue).font(LC.Text.headline).foregroundStyle(.white)
                 }
             }
         }

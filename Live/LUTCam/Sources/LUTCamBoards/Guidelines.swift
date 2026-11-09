@@ -9,7 +9,7 @@ struct GuidelinesBoard: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("LUT Cam guidelines").font(.system(size: 44, weight: .black)).foregroundStyle(.white)
                 Text("Every value here comes from the app's code. Change a value there, never on one screen.")
-                    .font(LC.Page.body).foregroundStyle(LC.Colour.secondary)
+                    .font(LC.Text.body).foregroundStyle(LC.Colour.secondary)
             }
             section("Rules") { rules }
             section("Colour") { colours }
@@ -27,7 +27,7 @@ struct GuidelinesBoard: View {
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text(title.uppercased()).font(LC.Page.caption).foregroundStyle(LC.Colour.secondary)
+            Text(title.uppercased()).font(LC.Text.label).foregroundStyle(LC.Colour.secondary)
             content()
         }
     }
@@ -53,8 +53,8 @@ struct GuidelinesBoard: View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 24), GridItem(.flexible())], alignment: .leading, spacing: 24) {
             ForEach(ruleList, id: \.0) { r in
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(r.0).font(LC.Page.headline).foregroundStyle(.white)
-                    Text(r.1).font(LC.Page.body).foregroundStyle(LC.Colour.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(r.0).font(LC.Text.headline).foregroundStyle(.white)
+                    Text(r.1).font(LC.Text.body).foregroundStyle(LC.Colour.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, minHeight: 130, alignment: .topLeading)
@@ -80,9 +80,9 @@ struct GuidelinesBoard: View {
         VStack(alignment: .leading, spacing: 10) {
             RoundedRectangle(cornerRadius: 16, style: .continuous).fill(c).frame(height: 110)
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(border ? 0.2 : 0), lineWidth: 1))
-            Text(name).font(LC.Page.bodyStrong).foregroundStyle(.white)
-            Text(hex).font(LC.Page.caption).foregroundStyle(LC.Colour.secondary)
-            Text(job).font(LC.Page.caption).foregroundStyle(LC.Colour.secondary)
+            Text(name).font(LC.Text.bodyStrong).foregroundStyle(.white)
+            Text(hex).font(LC.Text.label).foregroundStyle(LC.Colour.secondary)
+            Text(job).font(LC.Text.label).foregroundStyle(LC.Colour.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -91,14 +91,12 @@ struct GuidelinesBoard: View {
 
     private var type: some View {
         VStack(alignment: .leading, spacing: 0) {
-            typeRow("Screen title", "LC.Page.title · 30 bold", "Settings", LC.Page.title)
-            typeRow("Headline", "LC.Page.headline · 22 bold", "Kodak Portra 400", LC.Page.headline)
-            typeRow("Body", "LC.Page.body · 17 regular", "Your photos never leave your phone.", LC.Page.body)
-            typeRow("Body strong", "LC.Page.bodyStrong · 17 semibold", "Continue", LC.Page.bodyStrong)
-            typeRow("Caption", "LC.Page.caption · 13 medium", "3:2 · 1/120 · ISO 64", LC.Page.caption)
-            typeRow("Value", "LC.Text.value · 17 medium, digits fixed, red words in accentText", "−0.7 EV", LC.Text.value, red: true)
-            typeRow("Control", "LC.Text.control · 15 medium", "24 mm", LC.Text.control)
-                        typeRow("Can print", "LC.Text.print · 9 heavy (art, not text)", "PORTRA 400", LC.Text.print)
+            typeRow("Title", "LC.Text.title · large title 34 bold", "Settings", LC.Text.title)
+            typeRow("Headline", "LC.Text.headline · title 2, 22 bold", "Kodak Portra 400", LC.Text.headline)
+            typeRow("Body", "LC.Text.body · 17 (semibold for buttons)", "Your photos never leave your phone.", LC.Text.body)
+            typeRow("Label", "LC.Text.label · 15 medium, controls and grey lines", "Before you shoot", LC.Text.label)
+            typeRow("Mono", "LC.Text.mono · SF Mono 15 medium, every number", "−0.7 EV · 24 mm · 3:2", LC.Text.mono, red: true)
+                        typeRow("Edge print", "LC.Text.edgePrint · SF Mono 9, 60% white (art)", "PORTRA 400  ▸  4:3", LC.Text.edgePrint)
         }
         .background(RoundedRectangle(cornerRadius: LC.Radius.card, style: .continuous).fill(LC.Colour.card))
     }
@@ -106,8 +104,8 @@ struct GuidelinesBoard: View {
     private func typeRow(_ name: String, _ token: String, _ sample: String, _ font: Font, red: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(name).font(LC.Page.bodyStrong).foregroundStyle(.white)
-                Text(token).font(LC.Page.caption).foregroundStyle(LC.Colour.secondary)
+                Text(name).font(LC.Text.bodyStrong).foregroundStyle(.white)
+                Text(token).font(LC.Text.label).foregroundStyle(LC.Colour.secondary)
             }
             .frame(width: 360, alignment: .leading)
             Text(sample).font(font).foregroundStyle(red ? LC.Colour.accentText : .white)
@@ -120,24 +118,24 @@ struct GuidelinesBoard: View {
 
     private var spacing: some View {
         HStack(alignment: .bottom, spacing: 40) {
-            ForEach([("xs", LC.Space.xs), ("s", LC.Space.s), ("m / edge", LC.Space.m), ("l", LC.Space.l), ("xl", LC.Space.xl)], id: \.0) { n, v in
+            ForEach([("xs", LC.Space.xs), ("s", LC.Space.s), ("sm", LC.Space.sm), ("m", LC.Space.m), ("edge", LC.Space.edge), ("l", LC.Space.l), ("xl", LC.Space.xl), ("xxl", LC.Space.xxl)], id: \.0) { n, v in
                 VStack(alignment: .leading, spacing: 10) {
                     Rectangle().fill(LC.Colour.accent.opacity(0.8)).frame(width: v * 4, height: v * 4)
-                    Text("\(n) · \(Int(v))").font(LC.Page.bodyStrong).foregroundStyle(.white)
+                    Text("\(n) · \(Int(v))").font(LC.Text.bodyStrong).foregroundStyle(.white)
                 }
             }
             Spacer()
-            Text("Screen edge 16. Under a screen title 24.\nCloser means belongs: more room above a heading than under it.")
-                .font(LC.Page.body).foregroundStyle(LC.Colour.secondary).fixedSize(horizontal: false, vertical: true).frame(width: 380, alignment: .leading)
+            Text("4-pt steps. Screen edge 20. Under a screen title 24.\nCloser means belongs: more room above a heading than under it.\nControls: 36 on the picture, 44 to tap, 52 rows and buttons.")
+                .font(LC.Text.body).foregroundStyle(LC.Colour.secondary).fixedSize(horizontal: false, vertical: true).frame(width: 380, alignment: .leading)
         }
     }
 
     private var corners: some View {
         HStack(spacing: 40) {
-            ForEach([("Viewfinder", LC.Radius.viewfinder), ("Thumbnail", LC.Radius.thumb), ("Button", LC.Page.buttonRadius), ("Card", LC.Radius.card)], id: \.0) { n, r in
+            ForEach([("Viewfinder", LC.Radius.viewfinder), ("Thumbnail", LC.Radius.thumb), ("Button", LC.Radius.button), ("Card", LC.Radius.card)], id: \.0) { n, r in
                 VStack(spacing: 10) {
                     RoundedRectangle(cornerRadius: r, style: .continuous).fill(LC.Colour.card).frame(width: 140, height: 110)
-                    Text("\(n) · \(Int(r))").font(LC.Page.bodyStrong).foregroundStyle(.white)
+                    Text("\(n) · \(Int(r))").font(LC.Text.bodyStrong).foregroundStyle(.white)
                 }
             }
             Spacer()
@@ -150,7 +148,7 @@ struct GuidelinesBoard: View {
         VStack(alignment: .leading, spacing: 28) {
             HStack(alignment: .center, spacing: 40) {
                 item("Top button 40") { TopButton(symbol: "gearshape") }
-                item("Glass button 32") { GlassButton { Image(systemName: "arrow.triangle.2.circlepath") }.frame(width: LC.Size.glass) }
+                item("Glass button 36") { GlassButton { Image(systemName: "arrow.triangle.2.circlepath") }.frame(width: LC.Size.pair) }
                 item("Notice") { Notice(symbol: "checkmark.circle.fill", text: "Saved to Photos") }
                 item("Focus ring") { FocusRing().frame(width: 90, height: 60) }
                 item("Switch") { Switch(on: true) }
@@ -162,20 +160,19 @@ struct GuidelinesBoard: View {
                 }
                 item("Lens pill + flip") {
                     HStack(spacing: LC.Space.l) {
-                        GlassButton { Text("24 mm").font(LC.Text.control) }.frame(width: LC.Size.lensPill)
-                        GlassButton { Image(systemName: "arrow.triangle.2.circlepath") }.frame(width: LC.Size.glass)
+                        LensFlipPair(state: CameraState())
                     }
                     .padding(10).background(Color(white: 0.3))
                 }
                 item("Film button") {
                     Image(systemName: "film.stack").font(.system(size: LC.Size.icon, weight: .medium)).foregroundStyle(.white)
-                        .frame(width: 41, height: 49)
-                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(LC.Colour.card))
-                        .overlay(alignment: .topTrailing) { Circle().fill(LC.Colour.accent).frame(width: 12, height: 12).offset(x: 4, y: -4) }
+                        .frame(width: LC.Size.filmButton.width, height: LC.Size.filmButton.height)
+                        .background(RoundedRectangle(cornerRadius: LC.Radius.thumb, style: .continuous).fill(LC.Colour.card))
+                        .overlay(alignment: .topTrailing) { Circle().fill(LC.Colour.accent).frame(width: LC.Size.dot, height: LC.Size.dot).offset(x: LC.Space.xs, y: -LC.Space.xs) }
                 }
                 item("Exposure ruler · Liquid Glass band") {
                     VStack(spacing: 8) {
-                        Text("−0.7 EV").font(LC.Text.value).foregroundStyle(LC.Colour.accentText)
+                        Text("−0.7 EV").font(LC.Text.mono).foregroundStyle(LC.Colour.accentText)
                         Ruler().frame(width: 360, height: LC.Size.ruler)
                     }
                 }
@@ -196,12 +193,12 @@ struct GuidelinesBoard: View {
             ForEach(CanStock.all, id: \.self) { s in
                 VStack(spacing: 12) {
                     Canister(stock: s, height: 180)
-                    Text("\(s.name) \(s.speed)").font(LC.Page.bodyStrong).foregroundStyle(.white)
+                    Text("\(s.name) \(s.speed)").font(LC.Text.bodyStrong).foregroundStyle(.white)
                 }
             }
             VStack(spacing: 12) {
                 SideCan(stock: .portra).scaleEffect(2.4).frame(width: 70, height: 140)
-                Text("In the camera").font(LC.Page.bodyStrong).foregroundStyle(.white)
+                Text("In the camera").font(LC.Text.bodyStrong).foregroundStyle(.white)
             }
             Spacer()
         }
@@ -210,7 +207,7 @@ struct GuidelinesBoard: View {
     private func item<C: View>(_ label: String, @ViewBuilder _ c: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             c()
-            Text(label).font(LC.Page.caption).foregroundStyle(LC.Colour.secondary)
+            Text(label).font(LC.Text.label).foregroundStyle(LC.Colour.secondary)
         }
     }
 }
