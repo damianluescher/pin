@@ -52,7 +52,7 @@ private struct Phone<Content: View>: View {
             Capsule().fill(.white).frame(width: 140, height: 5).frame(height: 34)
         }
         .frame(width: 393, height: 852)
-        .background(Color.black)
+        .background(LC.Colour.canvas)
         .environment(\.colorScheme, .dark)
     }
 }
