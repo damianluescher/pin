@@ -7,6 +7,7 @@ import LUTCamBoards
 // LUTCamProbe render FOLDER [SCALE]: writes every board as FOLDER/<board id>.png. No window, nothing started.
 let args = CommandLine.arguments.dropFirst()
 MainActor.assumeIsolated {
+    LUTCamBoards.stillRender()
     guard args.first == "render", let folder = args.dropFirst().first else { print("LUTCamProbe render FOLDER [SCALE]"); return }
     let scale = args.dropFirst(2).first.flatMap(Double.init) ?? 2
     let out = URL(fileURLWithPath: folder, isDirectory: true)

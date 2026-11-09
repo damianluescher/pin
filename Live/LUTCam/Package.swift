@@ -8,7 +8,7 @@ let package = Package(
     platforms: [.macOS("15.0")],
     products: [.library(name: "LUTCamBoards", type: .dynamic, targets: ["LUTCamBoards"])],
     targets: [
-        .target(name: "LUTCamBoards", exclude: ["UI/Art/SOURCES.txt"], resources: [.process("UI/Art")]),
+        .target(name: "LUTCamBoards", exclude: ["UI/Art/SOURCES.txt", "UI/Art/Samples/SOURCES.txt"], resources: [.process("UI/Art")]),
         .executableTarget(name: "LUTCamProbe", dependencies: ["LUTCamBoards"]),
     ]
 )
