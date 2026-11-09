@@ -41,7 +41,7 @@ struct GuidelinesBoard: View {
         ("Unprocessed always kept", "Every photo keeps its unprocessed sensor file; any look can be changed later, Pure always first."),
         ("One red, one job", "#ED3329 only, for what is live, new or costs money: the value you change, new photos, prices, switches on. Never a big area."),
         ("Square viewfinder", "The picture has square corners. Cards and sheets keep their 28 corners."),
-        ("Shutter where Apple's is", "Anchored to the bottom, centre 86 pt above the screen edge, 72 pt, grey. Lenses in mm roll inside it."),
+        ("Shutter where Apple's is", "Anchored to the bottom, centre 86 pt above the screen edge, 72 pt, clean white, nothing inside. The lens is a 24 mm glass pill beside the flip button."),
         ("Glass on the picture", "Controls over or next to the picture are Liquid Glass on the phone: top buttons, flip, notices, the exposure ruler (Pin shows a plain fill)."),
         ("4Roll language", "Black canvas, #1C1C1E cards, heavy white titles, grey second lines, full-width buttons, the 4Roll film can."),
         ("Feel it", "Haptics everywhere: a tick per 0.1 EV and a stronger one at each stop, a firm tap on the shutter, a click on lens, look and format, a double tap on focus lock, a buzz on warnings."),
@@ -72,7 +72,7 @@ struct GuidelinesBoard: View {
             swatch(LC.Colour.primary, "Primary", "#FFFFFF", "Titles, values, icons")
             swatch(LC.Colour.secondary, "Secondary", "#999999", "Second lines, labels")
             swatch(LC.Colour.accent, "The one red", "#ED3329", "Live, new, price")
-            swatch(Color(white: 0.85), "Shutter", "#D9D9D9", "The shutter only")
+            swatch(Color.white, "Shutter", "#FFFFFF", "Clean white circle")
         }
     }
 
@@ -98,8 +98,7 @@ struct GuidelinesBoard: View {
             typeRow("Caption", "LC.Page.caption · 13 medium", "3:2 · 1/120 · ISO 64", LC.Page.caption)
             typeRow("Value", "LC.Text.value · 17 medium, digits fixed, red words in accentText", "−0.7 EV", LC.Text.value, red: true)
             typeRow("Control", "LC.Text.control · 15 medium", "24 mm", LC.Text.control)
-            typeRow("Shutter lenses", "LC.Text.counter · 22 bold, digits fixed", "13  24  77", LC.Text.counter)
-            typeRow("Can print", "LC.Text.print · 9 heavy (art, not text)", "PORTRA 400", LC.Text.print)
+                        typeRow("Can print", "LC.Text.print · 9 heavy (art, not text)", "PORTRA 400", LC.Text.print)
         }
         .background(RoundedRectangle(cornerRadius: LC.Radius.card, style: .continuous).fill(LC.Colour.card))
     }
@@ -158,16 +157,15 @@ struct GuidelinesBoard: View {
                 item("Price") { PricePill(text: "$19.99") }
             }
             HStack(alignment: .center, spacing: 40) {
-                item("Shutter 72, lenses in mm") {
-                    ZStack {
-                        Circle().fill(Color(white: 0.85))
-                        HStack(spacing: LC.Space.s) {
-                            Text("13").foregroundStyle(LC.Colour.counterNext)
-                            Text("24").foregroundStyle(Color(white: 0.3))
-                            Text("77").foregroundStyle(LC.Colour.counterNext)
-                        }.font(LC.Text.counter).fixedSize()
+                item("Shutter 72, clean white") {
+                    Circle().fill(Color.white).frame(width: LC.Size.shutter, height: LC.Size.shutter)
+                }
+                item("Lens pill + flip") {
+                    HStack(spacing: LC.Space.l) {
+                        GlassButton { Text("24 mm").font(LC.Text.control) }.frame(width: LC.Size.lensPill)
+                        GlassButton { Image(systemName: "arrow.triangle.2.circlepath") }.frame(width: LC.Size.glass)
                     }
-                    .frame(width: LC.Size.shutter, height: LC.Size.shutter).clipShape(Circle())
+                    .padding(10).background(Color(white: 0.3))
                 }
                 item("Film button") {
                     Image(systemName: "film.stack").font(.system(size: LC.Size.icon, weight: .medium)).foregroundStyle(.white)
