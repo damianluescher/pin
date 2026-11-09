@@ -42,7 +42,7 @@ struct GuidelinesBoard: View {
         ("Red has one job", "Red marks what is live, new or costs money: the value you change, new photos, prices, switches on. Never a big area."),
         ("Square viewfinder", "The picture has square corners. Cards and sheets keep their 28 corners."),
         ("Shutter where Apple's is", "Anchored to the bottom, centre 86 pt above the screen edge, 72 pt, grey. Lenses in mm roll inside it."),
-        ("Glass on the picture", "Controls over the picture are Liquid Glass on the phone (plain dark fill in Pin, which cannot draw glass)."),
+        ("Glass on the picture", "Controls over or next to the picture are Liquid Glass on the phone: top buttons, flip, notices, the exposure ruler (Pin shows a plain fill)."),
         ("4Roll language", "Black canvas, #1C1C1E cards, heavy white titles, grey second lines, full-width buttons, the 4Roll film can."),
         ("Few words", "Short, plain, in Damian's voice. No helper sentences for obvious things."),
         ("One scale", "Only the sizes, gaps, corners and colours on this page. A new value is added here first."),
@@ -70,7 +70,8 @@ struct GuidelinesBoard: View {
             swatch(LC.Colour.card, "Card", "#1C1C1E", "Cards, sheets, tiles")
             swatch(LC.Colour.primary, "Primary", "#FFFFFF", "Titles, values, icons")
             swatch(LC.Colour.secondary, "Secondary", "#999999", "Second lines, labels")
-            swatch(LC.Colour.accent, "Accent red", "#ED3329", "Live, new, price")
+            swatch(LC.Colour.accent, "Accent red", "#C8291F", "Fills: live, new, price")
+            swatch(LC.Colour.accentText, "Red words", "#E23B2F", "Red text, 4.9:1")
             swatch(Color(white: 0.85), "Shutter", "#D9D9D9", "The shutter only")
         }
     }
@@ -95,7 +96,7 @@ struct GuidelinesBoard: View {
             typeRow("Body", "LC.Page.body · 17 regular", "Your photos never leave your phone.", LC.Page.body)
             typeRow("Body strong", "LC.Page.bodyStrong · 17 semibold", "Continue", LC.Page.bodyStrong)
             typeRow("Caption", "LC.Page.caption · 13 medium", "3:2 · 1/120 · ISO 64", LC.Page.caption)
-            typeRow("Value", "LC.Text.value · 17 medium, digits fixed", "−0.7 EV", LC.Text.value, red: true)
+            typeRow("Value", "LC.Text.value · 17 medium, digits fixed, red words in accentText", "−0.7 EV", LC.Text.value, red: true)
             typeRow("Control", "LC.Text.control · 15 medium", "24 mm", LC.Text.control)
             typeRow("Shutter lenses", "LC.Text.counter · 22 bold, digits fixed", "13  24  77", LC.Text.counter)
             typeRow("Can print", "LC.Text.print · 9 heavy (art, not text)", "PORTRA 400", LC.Text.print)
@@ -110,7 +111,7 @@ struct GuidelinesBoard: View {
                 Text(token).font(LC.Page.caption).foregroundStyle(LC.Colour.secondary)
             }
             .frame(width: 360, alignment: .leading)
-            Text(sample).font(font).foregroundStyle(red ? LC.Colour.accent : .white)
+            Text(sample).font(font).foregroundStyle(red ? LC.Colour.accentText : .white)
             Spacer()
         }
         .padding(.horizontal, 24).padding(.vertical, 16)
@@ -174,9 +175,9 @@ struct GuidelinesBoard: View {
                         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(LC.Colour.card))
                         .overlay(alignment: .topTrailing) { Circle().fill(LC.Colour.accent).frame(width: 12, height: 12).offset(x: 4, y: -4) }
                 }
-                item("Exposure ruler") {
+                item("Exposure ruler · Liquid Glass band") {
                     VStack(spacing: 8) {
-                        Text("−0.7 EV").font(LC.Text.value).foregroundStyle(LC.Colour.accent)
+                        Text("−0.7 EV").font(LC.Text.value).foregroundStyle(LC.Colour.accentText)
                         Ruler().frame(width: 360, height: LC.Size.ruler)
                     }
                 }
