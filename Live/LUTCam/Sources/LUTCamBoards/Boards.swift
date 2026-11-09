@@ -12,6 +12,7 @@ public enum LUTCamBoards {
     }
 
     public static let boards: [Board] = [
+        Board(name: "Icon options", page: "App icon", width: 1100, height: 880),
         Board(name: "Guidelines", page: "Guidelines", width: 1200, height: 3480),
         Board(name: "Camera", page: "Camera", width: 393, height: 852),
         Board(name: "Look picker", page: "Camera", width: 393, height: 852),
@@ -59,6 +60,7 @@ public enum LUTCamBoards {
     public static func board(_ name: String) -> AnyView {
         let n = boards.first { $0.name == name || $0.id == name }?.name ?? name
         switch n {
+        case "Icon options": return AnyView(IconOptionsBoard().environment(\.colorScheme, .dark))
         case "Guidelines": return AnyView(GuidelinesBoard().environment(\.colorScheme, .dark))
         case "Camera": return AnyView(Phone { CameraScreen(state: CameraState()) })
         case "Look picker": return AnyView(Phone { LookPickerState() })
