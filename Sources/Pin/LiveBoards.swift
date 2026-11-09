@@ -37,6 +37,10 @@ enum LiveBoards {
         if let known = configs[app], now.timeIntervalSince(known.read) < 2 { return known.config }
         let config = store.live(app: app)
         configs[app] = (now, config)
+        // A rebuilt library shows by itself (Damian, 9 Nov 2026: "pin is not refreshing").
+        if let path = config?.library, libraries[path] != nil, isNewBuild(path) {
+            DispatchQueue.main.async { refreshSwiftBoards() }
+        }
         return config
     }
     private static var configs: [String: (read: Date, config: LiveConfig?)] = [:]
@@ -99,12 +103,66 @@ enum LiveBoards {
 
     private static func library(_ path: String) -> UnsafeMutableRawPointer? {
         if let open = libraries[path] { return open }
-        guard let open = dlopen(path, RTLD_NOW | RTLD_LOCAL) else {
+        guard let open = openCopy(path) else { return nil }
+        libraries[path] = open
+        return open
+    }
+
+    /// When each library was built, as loaded.
+    private static var builds: [String: Date] = [:]
+
+    private static func built(_ path: String) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+    }
+
+    /// A newer build than the one loaded, finished writing (a second old), so a half-written file is never opened.
+    private static func isNewBuild(_ path: String) -> Bool {
+        guard let date = built(path), date != builds[path] else { return false }
+        return Date().timeIntervalSince(date) > 1
+    }
+
+    /// dlopen keeps the first image it opened for a path, so each build is opened from its own copy.
+    private static func openCopy(_ path: String) -> UnsafeMutableRawPointer? {
+        let date = built(path) ?? Date()
+        // Beside the original, so the library still finds its resource bundle (Bundle.module looks next to itself).
+        let folder = URL(fileURLWithPath: (path as NSString).deletingLastPathComponent, isDirectory: true)
+        let name = (path as NSString).lastPathComponent
+        let prefix = ".pin-copy-"
+        let copy = folder.appendingPathComponent("\(prefix)\(Int(date.timeIntervalSince1970 * 1000))-\(name)")
+        // Older copies of this library are not needed once a new one is made.
+        for old in (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        where old.hasPrefix(prefix) && old.hasSuffix(name) && old != copy.lastPathComponent {
+            try? FileManager.default.removeItem(at: folder.appendingPathComponent(old))
+        }
+        if !FileManager.default.fileExists(atPath: copy.path) {
+            do { try FileManager.default.copyItem(atPath: path, toPath: copy.path) } catch {
+                NSLog("Pin: could not copy live boards: %@", error.localizedDescription)
+                return nil
+            }
+        }
+        guard let open = dlopen(copy.path, RTLD_NOW | RTLD_LOCAL) else {
             NSLog("Pin: could not load live boards: %@", String(cString: dlerror()))
             return nil
         }
-        libraries[path] = open
+        builds[path] = date
         return open
+    }
+
+    /// Opens rebuilt libraries and starts their boards again from the new code. Runs on Refresh and when a build lands.
+    static func refreshSwiftBoards() {
+        var changed = false
+        for path in libraries.keys where isNewBuild(path) {
+            guard let fresh = openCopy(path) else { continue }
+            libraries[path] = fresh
+            changed = true
+        }
+        guard changed else { return }
+        views.removeAll()
+        keptScreens.removeAll()
+        for (key, weak) in onCanvas where weak.board is SwiftBoardView {
+            (weak.board?.superview as? BoardView)?.setLive(nil)
+            onCanvas[key] = nil
+        }
     }
 }
 

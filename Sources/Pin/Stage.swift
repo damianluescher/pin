@@ -267,7 +267,7 @@ final class PictureView: NSView {
 }
 
 /// One board on the canvas, at its design size: the picture, sharp vector detail over it, a running screen over that.
-private final class BoardView: NSView {
+final class BoardView: NSView {
     let key: String
     var item: Placed?
     private let picture = PictureView()

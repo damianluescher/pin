@@ -170,7 +170,7 @@ struct RootView: View {
                 .pickerStyle(.segmented).labelStyle(.iconOnly)
             }
             ToolbarItem(placement: .primaryAction) {
-                Button { model.reload(); LiveBoards.refreshWebBoards() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                Button { model.reload(); LiveBoards.refreshWebBoards(); LiveBoards.refreshSwiftBoards() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                     .keyboardShortcut("r", modifiers: .command)
                     .help("Refresh all boards (⌘R)")
             }
