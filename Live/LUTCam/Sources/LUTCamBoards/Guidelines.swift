@@ -147,7 +147,7 @@ struct GuidelinesBoard: View {
     private var controls: some View {
         VStack(alignment: .leading, spacing: 28) {
             HStack(alignment: .center, spacing: 40) {
-                item("Top button 40") { TopButton(symbol: "gearshape") }
+                item("Ghost icons in the picture") { GhostBar(state: CameraState()).frame(width: 320).background(Color(white: 0.3)) }
                 item("Glass button 36") { GlassButton { Image(systemName: "arrow.triangle.2.circlepath") }.frame(width: LC.Size.pair) }
                 item("Notice") { Notice(symbol: "checkmark.circle.fill", text: "Saved to Photos") }
                 item("Focus ring") { FocusRing().frame(width: 90, height: 60) }
@@ -156,11 +156,11 @@ struct GuidelinesBoard: View {
             }
             HStack(alignment: .center, spacing: 40) {
                 item("Shutter 72, clean white") {
-                    Circle().fill(Color.white).frame(width: LC.Size.shutter, height: LC.Size.shutter)
+                    ShutterDisc()
                 }
                 item("Lens pill + flip") {
                     HStack(spacing: LC.Space.l) {
-                        LensFlipPair(state: CameraState())
+                        GhostBar(state: CameraState())
                     }
                     .padding(10).background(Color(white: 0.3))
                 }
