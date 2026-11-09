@@ -13,6 +13,7 @@ public enum LUTCamBoards {
 
     public static let boards: [Board] = [
         Board(name: "Camera", page: "Camera", width: 393, height: 852),
+        Board(name: "Camera quiet", page: "Camera", width: 393, height: 852),
         Board(name: "App icon directions", page: "App icon", width: 1024, height: 540),
     ]
 
@@ -24,6 +25,7 @@ public enum LUTCamBoards {
     public static func board(_ name: String) -> AnyView {
         switch name {
         case "Camera", "camera": AnyView(Phone { CameraScreen(state: CameraState()) })
+        case "Camera quiet", "camera-quiet": AnyView(Phone { CameraQuietScreen(state: CameraState()) })
         case "App icon directions", "app-icon-directions": AnyView(AppIconBoard())
         default: AnyView(Text("No board \(name)").foregroundStyle(.white))
         }
