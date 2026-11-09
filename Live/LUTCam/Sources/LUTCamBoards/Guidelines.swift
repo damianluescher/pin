@@ -44,6 +44,7 @@ struct GuidelinesBoard: View {
         ("Shutter where Apple's is", "Anchored to the bottom, centre 86 pt above the screen edge, 72 pt, grey. Lenses in mm roll inside it."),
         ("Glass on the picture", "Controls over or next to the picture are Liquid Glass on the phone: top buttons, flip, notices, the exposure ruler (Pin shows a plain fill)."),
         ("4Roll language", "Black canvas, #1C1C1E cards, heavy white titles, grey second lines, full-width buttons, the 4Roll film can."),
+        ("Feel it", "Haptics everywhere: a tick per 0.1 EV and a stronger one at each stop, a firm tap on the shutter, a click on lens, look and format, a double tap on focus lock, a buzz on warnings."),
         ("Few words", "Short, plain, in Damian's voice. No helper sentences for obvious things."),
         ("One scale", "Only the sizes, gaps, corners and colours on this page. A new value is added here first."),
     ]
