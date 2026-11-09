@@ -130,7 +130,7 @@ public enum NightRollBoards {
         let size = size(name)
         if name == "Options camera" {
             return AnyView(OptionsBoard(screenName: "Camera") {
-                CameraScreen(state: Samples.camera(left: 13)) { Viewfinder() }
+                QuietCameraScreen(state: Samples.camera(left: 13)) { Viewfinder() }
             } b: {
                 DisposableCameraScreen(state: Samples.camera(left: 13)) { Viewfinder() }
             } c: {

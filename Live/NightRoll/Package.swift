@@ -9,7 +9,8 @@ let package = Package(
     platforms: [.macOS("15.0")],
     products: [.library(name: "NightRollBoards", type: .dynamic, targets: ["NightRollBoards"])],
     targets: [
-        .target(name: "NightRollBoards"),
+        // The printed camera's pictures (App/UI/Art), found by NRArt through Bundle.module.
+        .target(name: "NightRollBoards", resources: [.process("UI/Art")]),
         .executableTarget(name: "NightRollProbe", dependencies: ["NightRollBoards"]),
     ]
 )
