@@ -39,7 +39,7 @@ struct GuidelinesBoard: View {
         ("Film stocks only", "Looks are real stocks simulated from their data (spektrafilm). No old-phone or made-up filters."),
         ("Not a film-roll app", "No frame counters, rolls, \"developing\" or expiry dates. Shooting experience and image quality."),
         ("Unprocessed always kept", "Every photo keeps its unprocessed sensor file; any look can be changed later, Pure always first."),
-        ("Red has one job", "Red marks what is live, new or costs money: the value you change, new photos, prices, switches on. Never a big area."),
+        ("One red, one job", "#8B0000 only, for what is live, new or costs money: the value you change, new photos, prices, switches on. Never a big area."),
         ("Square viewfinder", "The picture has square corners. Cards and sheets keep their 28 corners."),
         ("Shutter where Apple's is", "Anchored to the bottom, centre 86 pt above the screen edge, 72 pt, grey. Lenses in mm roll inside it."),
         ("Glass on the picture", "Controls over or next to the picture are Liquid Glass on the phone: top buttons, flip, notices, the exposure ruler (Pin shows a plain fill)."),
@@ -71,8 +71,7 @@ struct GuidelinesBoard: View {
             swatch(LC.Colour.card, "Card", "#1C1C1E", "Cards, sheets, tiles")
             swatch(LC.Colour.primary, "Primary", "#FFFFFF", "Titles, values, icons")
             swatch(LC.Colour.secondary, "Secondary", "#999999", "Second lines, labels")
-            swatch(LC.Colour.accent, "Accent red", "#C8291F", "Fills: live, new, price")
-            swatch(LC.Colour.accentText, "Red words", "#E23B2F", "Red text, 4.9:1")
+            swatch(LC.Colour.accent, "The one red", "#8B0000", "Live, new, price")
             swatch(Color(white: 0.85), "Shutter", "#D9D9D9", "The shutter only")
         }
     }
