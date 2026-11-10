@@ -35,6 +35,8 @@ public enum LUTCamBoards {
         Board(name: "How it works", page: "First open", width: 393, height: 852),
         Board(name: "Camera not allowed", page: "First open", width: 393, height: 852),
         Board(name: "Photos not allowed", page: "First open", width: 393, height: 852),
+        Board(name: "Photo edit look", page: "After the shot", width: 393, height: 852),
+        Board(name: "Photo edit exposure", page: "After the shot", width: 393, height: 852),
         Board(name: "Edit look", page: "After the shot", width: 393, height: 852),
         Board(name: "Edit exposure", page: "After the shot", width: 393, height: 852),
         Board(name: "Edit white balance", page: "After the shot", width: 393, height: 852),
@@ -86,6 +88,8 @@ public enum LUTCamBoards {
         case "How it works": return AnyView(Phone { HowItWorksScreen() })
         case "Camera not allowed": return AnyView(Phone { DeniedScreen() })
         case "Photos not allowed": return AnyView(Phone { DeniedScreen(photos: true) })
+        case "Photo edit look": return AnyView(Phone { PhotoEditInline(tool: .look) })
+        case "Photo edit exposure": return AnyView(Phone { PhotoEditInline(tool: .exposure) })
         case "Edit look": return AnyView(Phone { PhotoEditBoard(tool: .look) })
         case "Edit exposure": return AnyView(Phone { PhotoEditBoard(tool: .exposure) })
         case "Edit white balance": return AnyView(Phone { PhotoEditBoard(tool: .white) })

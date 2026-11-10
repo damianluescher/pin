@@ -115,3 +115,83 @@ struct PhotoEditBoard: View {
         }
     }
 }
+
+/// The editor directly in the photo page (Damian, Pin 10 Nov on Edit look: "it should be directly in this edit
+/// page"): no separate Edit page and no Cancel/Save. Under the picture four small tabs; Look shows the cans, the
+/// others their dial. Every change is kept at once and can be changed again later (the unprocessed file stays).
+struct PhotoEditInline: View {
+    var tool: EditTool = .look
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                RoundIcon(symbol: "chevron.left")
+                Spacer()
+                Text(tool == .look ? "Portra 400" : tool.rawValue).font(LC.Text.bodyStrong).foregroundStyle(LC.Colour.primary)
+                Spacer()
+                RoundIcon(symbol: "info")
+            }
+            ZStack {
+                Fill(image: LCArt.image(.viewfinder))
+                    .look(Look.named("portra-400"))
+                    .brightness(tool == .exposure ? 0.06 : 0)
+                    .colorMultiply(tool == .white ? Color(red: 1, green: 0.94, blue: 0.86) : .white)
+                if tool == .format { FormatMask(ratio: 2.0 / 3.0) }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: LC.Radius.viewfinder, style: .continuous))
+            .padding(.top, LC.Space.m)
+            control.frame(height: 150).padding(.top, LC.Space.l)
+            tabs.padding(.top, LC.Space.m)
+            HStack {
+                RoundIcon(symbol: "square.and.arrow.up")
+                Spacer()
+                RoundIcon(symbol: "arrow.down.doc")
+                Spacer()
+                RoundIcon(symbol: "trash")
+            }
+            .padding(.horizontal, LC.Space.l)
+            .padding(.vertical, LC.Space.m)
+        }
+        .padding(.horizontal, LC.Space.edge)
+        .background(LC.Colour.canvas)
+    }
+
+    @ViewBuilder private var control: some View {
+        switch tool {
+        case .look: CanCarousel(selected: 1, withUnprocessed: true, spacing: LC.Space.m)
+        case .exposure: dial("+0.4 EV")
+        case .white: dial("5 600 K")
+        case .format:
+            HStack(spacing: LC.Space.xs) {
+                ForEach(FilmFormat.allCases, id: \.self) { f in
+                    Text(f.rawValue).font(LC.Text.mono).lineLimit(1).fixedSize()
+                        .foregroundStyle(f == .f35 ? Color.black : LC.Colour.primary)
+                        .padding(.horizontal, LC.Space.pill).frame(height: LC.Size.pair)
+                        .background(Capsule().fill(f == .f35 ? Color.white : .clear))
+                }
+            }
+        }
+    }
+
+    private func dial(_ value: String) -> some View {
+        VStack(spacing: LC.Space.s) {
+            Text(value).font(LC.Text.label.monospacedDigit()).foregroundStyle(LC.Colour.accentText)
+            Ruler().frame(height: LC.Size.ruler)
+        }
+    }
+
+    /// Four small text tabs, the chosen one white with a red dot under it.
+    private var tabs: some View {
+        HStack(spacing: 0) {
+            ForEach(EditTool.allCases, id: \.self) { t in
+                VStack(spacing: LC.Space.xs) {
+                    Text(t == .white ? "WB" : t.rawValue).font(LC.Text.label)
+                        .foregroundStyle(t == tool ? LC.Colour.primary : LC.Colour.secondary)
+                    Circle().fill(t == tool ? LC.Colour.accent : .clear).frame(width: 5, height: 5)
+                }
+                .frame(maxWidth: .infinity, minHeight: LC.Size.control)
+            }
+        }
+    }
+}
