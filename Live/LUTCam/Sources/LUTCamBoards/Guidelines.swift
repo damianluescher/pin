@@ -40,9 +40,9 @@ struct GuidelinesBoard: View {
         ("Not a film-roll app", "No frame counters, rolls, \"developing\" or expiry dates. Shooting experience and image quality."),
         ("Unprocessed always kept", "Every photo keeps its unprocessed sensor file; any look can be changed later, Pure always first."),
         ("One red, one job", "#ED3329 only, for what is live, new or costs money: the value you change, new photos, prices, switches on. Never a big area."),
-        ("Square viewfinder", "The picture has square corners. Cards and sheets keep their 28 corners."),
-        ("Shutter where Apple's is", "Anchored to the bottom, centre 86 pt above the screen edge, 72 pt, clean white, nothing inside. The lens is a 24 mm glass pill beside the flip button."),
-        ("Glass on the picture", "Controls over or next to the picture are Liquid Glass on the phone: top buttons, flip, notices, the exposure ruler (Pin shows a plain fill)."),
+        ("Round picture", "The picture has 28 corners, 12 from the screen edge, like 4Roll."),
+        ("Shutter where Apple's is", "Anchored to the bottom, centre 86 pt above the screen edge, 72 pt, solid white, nothing inside. The lens is a 24 mm glass pill beside the flip button."),
+        ("Glass on the picture", "Controls over or next to the picture are Liquid Glass on the phone: top buttons, flip, notices, the format chip (Pin shows a plain fill). No edge print, no helper lines."),
         ("4Roll language", "Black canvas, #1C1C1E cards, heavy white titles, grey second lines, full-width buttons, the 4Roll film can."),
         ("Feel it", "Haptics everywhere: a tick per 0.1 EV and a stronger one at each stop, a firm tap on the shutter, a click on lens, look and format, a double tap on focus lock, a buzz on warnings."),
         ("Few words", "Short, plain, in Damian's voice. No helper sentences for obvious things."),
@@ -96,7 +96,6 @@ struct GuidelinesBoard: View {
             typeRow("Body", "LC.Text.body · 17 (semibold for buttons)", "Your photos never leave your phone.", LC.Text.body)
             typeRow("Label", "LC.Text.label · 15 medium, controls and grey lines", "Before you shoot", LC.Text.label)
             typeRow("Mono", "LC.Text.mono · SF Mono 15 medium, every number", "−0.7 EV · 24 mm · 3:2", LC.Text.mono, red: true)
-                        typeRow("Edge print", "LC.Text.edgePrint · SF Mono 9, 60% white (art)", "PORTRA 400  ▸  4:3", LC.Text.edgePrint)
         }
         .background(RoundedRectangle(cornerRadius: LC.Radius.card, style: .continuous).fill(LC.Colour.card))
     }
@@ -170,7 +169,7 @@ struct GuidelinesBoard: View {
                         .background(RoundedRectangle(cornerRadius: LC.Radius.thumb, style: .continuous).fill(LC.Colour.card))
                         .overlay(alignment: .topTrailing) { Circle().fill(LC.Colour.accent).frame(width: LC.Size.dot, height: LC.Size.dot).offset(x: LC.Space.xs, y: -LC.Space.xs) }
                 }
-                item("Exposure ruler · Liquid Glass band") {
+                item("Exposure ruler · faint band") {
                     VStack(spacing: 8) {
                         Text("−0.7 EV").font(LC.Text.mono).foregroundStyle(LC.Colour.accentText)
                         Ruler().frame(width: 360, height: LC.Size.ruler)
