@@ -42,6 +42,8 @@ public enum LUTCamBoards {
         Board(name: "Photos not allowed", page: "First open", width: 393, height: 852),
         Board(name: "Photo edit look", page: "After the shot", width: 393, height: 852),
         Board(name: "Photo edit strength", page: "After the shot", width: 393, height: 852),
+        Board(name: "Look option A thumbnails", page: "After the shot", width: 393, height: 852),
+        Board(name: "Look option B swipe", page: "After the shot", width: 393, height: 852),
         Board(name: "Photo edit exposure", page: "After the shot", width: 393, height: 852),
         Board(name: "Edit look", page: "After the shot", width: 393, height: 852),
         Board(name: "Edit exposure", page: "After the shot", width: 393, height: 852),
@@ -101,6 +103,8 @@ public enum LUTCamBoards {
         case "Photos not allowed": return AnyView(Phone { DeniedScreen(photos: true) })
         case "Photo edit look": return AnyView(Phone { PhotoViewScreen(tool: .look) })
         case "Photo edit strength": return AnyView(Phone { PhotoViewScreen(tool: .strength) })
+        case "Look option A thumbnails": return AnyView(Phone { PhotoViewScreen(title: "Ektar 100", tool: .look, control: AnyView(LookThumbStrip())) })
+        case "Look option B swipe": return AnyView(Phone { LookSwipePage() })
         case "Photo edit exposure": return AnyView(Phone { PhotoViewScreen(tool: .exposure) })
         case "Edit look": return AnyView(Phone { PhotoViewScreen(tool: .look) })
         case "Edit exposure": return AnyView(Phone { PhotoViewScreen(tool: .exposure) })
