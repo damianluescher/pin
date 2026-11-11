@@ -15,6 +15,11 @@ public enum LUTCamBoards {
         Board(name: "Icon options", page: "App icon", width: 1100, height: 880),
         Board(name: "Guidelines", page: "Guidelines", width: 1200, height: 3480),
         Board(name: "Camera", page: "Camera", width: 393, height: 852),
+        Board(name: "Camera pro", page: "Camera", width: 393, height: 852),
+        Board(name: "Camera pro ISO", page: "Camera", width: 393, height: 852),
+        Board(name: "Camera pro shutter", page: "Camera", width: 393, height: 852),
+        Board(name: "Camera pro WB", page: "Camera", width: 393, height: 852),
+        Board(name: "Camera pro focus", page: "Camera", width: 393, height: 852),
         Board(name: "Look picker", page: "Camera", width: 393, height: 852),
         Board(name: "Format 6x6", page: "Camera", width: 393, height: 852),
         Board(name: "Format XPan", page: "Camera", width: 393, height: 852),
@@ -69,6 +74,11 @@ public enum LUTCamBoards {
         case "Icon options": return AnyView(IconOptionsBoard().environment(\.colorScheme, .dark))
         case "Guidelines": return AnyView(GuidelinesBoard().environment(\.colorScheme, .dark))
         case "Camera": return AnyView(Phone { CameraScreen(state: CameraState()) })
+        case "Camera pro": return AnyView(Phone { CameraScreen(state: { var s = CameraState(); s.pro = true; s.dial = .ev; return s }()) })
+        case "Camera pro ISO": return AnyView(Phone { CameraScreen(state: { var s = CameraState(); s.pro = true; s.dial = .iso; s.manual = [.iso]; s.iso = "800"; s.dialPosition = 1; return s }()) })
+        case "Camera pro shutter": return AnyView(Phone { CameraScreen(state: { var s = CameraState(); s.pro = true; s.dial = .shutter; s.manual = [.iso, .shutter]; s.iso = "800"; s.shutter = "1/250"; s.dialPosition = -1.3; return s }()) })
+        case "Camera pro WB": return AnyView(Phone { CameraScreen(state: { var s = CameraState(); s.pro = true; s.dial = .white; s.manual = [.white]; s.kelvin = "3200K"; s.dialPosition = -2.3; return s }()) })
+        case "Camera pro focus": return AnyView(Phone { CameraScreen(state: { var s = CameraState(); s.pro = true; s.dial = .focus; s.manual = [.focus]; s.focusText = "MF 0.60"; s.dialPosition = 0.6; return s }()) })
         case "Look picker": return AnyView(Phone { LookPickerState() })
         case "Format 6x6": return AnyView(Phone { FormatState(format: .square) })
         case "Format XPan": return AnyView(Phone { FormatState(format: .pano) })
