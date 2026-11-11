@@ -73,7 +73,7 @@ public enum LUTCamBoards {
         case "Icon options": return AnyView(IconOptionsBoard().environment(\.colorScheme, .dark))
         case "Guidelines": return AnyView(GuidelinesBoard().environment(\.colorScheme, .dark))
         case "Camera": return AnyView(Phone { CameraScreen(state: CameraState()) })
-        case "Camera pro": return AnyView(Phone { CameraScreen(state: { var s = CameraState(); s.pro = true; s.dial = .ev; return s }()) })
+        case "Camera pro": return AnyView(Phone { CameraScreen(state: { var s = CameraState(); s.pro = true; s.dial = .iso; return s }()) })
         case "Camera pro ISO": return AnyView(Phone { CameraScreen(state: { var s = CameraState(); s.pro = true; s.dial = .iso; s.manual = [.iso]; s.iso = "800"; s.dialPosition = 1; return s }()) })
         case "Camera pro shutter": return AnyView(Phone { CameraScreen(state: { var s = CameraState(); s.pro = true; s.dial = .shutter; s.manual = [.iso, .shutter]; s.iso = "800"; s.shutter = "1/250"; s.dialPosition = -1.3; return s }()) })
         case "Camera pro WB": return AnyView(Phone { CameraScreen(state: { var s = CameraState(); s.pro = true; s.dial = .white; s.manual = [.white]; s.kelvin = "3200K"; s.dialPosition = -2.3; return s }()) })
