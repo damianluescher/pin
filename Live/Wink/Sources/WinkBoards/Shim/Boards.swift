@@ -3,7 +3,7 @@ import SwiftUI
 /// What Pin loads: Wink's real screens, by board name, each with its own model and made-up data. Nothing runs the engine.
 @MainActor
 enum WinkBoards {
-    private enum Frame { case mac, phone, drawer }
+    private enum Frame { case mac, phone, drawer, playbooks(String) }
 
     private struct Spec {
         var frame = Frame.mac
@@ -19,6 +19,8 @@ enum WinkBoards {
     private static func spec(_ board: String) -> Spec {
         switch board {
         case "mac-start", "new-mac-side-list-with-agents": return Spec()
+        // Playbooks (12 Nov 2026), design only: the views are in Shim/Playbooks.swift.
+        case let name where name.hasPrefix("new-playbooks-"): return Spec(frame: .playbooks(String(name.dropFirst("new-playbooks-".count))))
         // A chat whose turn ended while its background job still runs (12 Nov 2026: "this looks to me like done").
         case "new-mac-side-list-waiting-on-a-background-job": return Spec(setup: { model in
             if let index = model.chats.firstIndex(where: { $0.id == "launch" }) { model.chats[index].state = "working" }
@@ -143,6 +145,19 @@ enum WinkBoards {
         case .mac:
             Zoomed { Root().winkOverlays() }
                 .overlay(alignment: .topLeading) { WindowDots() }
+        case .playbooks(let which):
+            switch which {
+            case "brief-3-things-to-decide": PlaybooksBrief()
+            case "mac-page": Zoomed { PlayWindow { PlaybooksPage() } }.overlay(alignment: .topLeading) { WindowDots() }
+            case "mac-page-runs-by-itself-option-b": Zoomed { PlayWindow { PlaybooksPage(alone: true) } }.overlay(alignment: .topLeading) { WindowDots() }
+            case "mac-open": Zoomed { PlayWindow { PlaybookOpen(play: Plays.all[0]) } }.overlay(alignment: .topLeading) { WindowDots() }
+            case "mac-fix-from-a-chat": Zoomed { FixFromChat().winkOverlays() }.overlay(alignment: .topLeading) { WindowDots() }
+            case "mac-new-playbook": Zoomed { NewPlaybookInterview().winkOverlays() }.overlay(alignment: .topLeading) { WindowDots() }
+            case "iphone-page":
+                PlaybooksPage(compact: true).safeAreaPadding(.top, 54).overlay(alignment: .top) { PhoneStatusBar() }.background(Theme.canvas)
+            default:
+                PlaybookOpen(play: Plays.all[0], compact: true).safeAreaPadding(.top, 54).overlay(alignment: .top) { PhoneStatusBar() }.background(Theme.canvas)
+            }
         case .phone:
             PhoneScreen().winkOverlays().coordinateSpace(.named(WinkZoom.space))
                 .safeAreaPadding(.top, 54)
