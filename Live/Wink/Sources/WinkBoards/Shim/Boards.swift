@@ -19,6 +19,11 @@ enum WinkBoards {
     private static func spec(_ board: String) -> Spec {
         switch board {
         case "mac-start", "new-mac-side-list-with-agents": return Spec()
+        // A chat whose turn ended while its background job still runs (12 Nov 2026: "this looks to me like done").
+        case "new-mac-side-list-waiting-on-a-background-job": return Spec(setup: { model in
+            if let index = model.chats.firstIndex(where: { $0.id == "launch" }) { model.chats[index].state = "working" }
+            if let index = model.chats.firstIndex(where: { $0.id == "brand" }) { model.chats[index].background = ["Downloading 12 reels, then sorting them"] }
+        })
         case "mac-chat": return Spec(chat: "penpot")
         case "mac-chat-sidebar-hidden": return Spec(chat: "penpot", setup: { $0.sideShut = true })
         case "mac-chat-with-steps-open": return Spec(chat: "steps", env: ["WINK_STEPS": "1"])

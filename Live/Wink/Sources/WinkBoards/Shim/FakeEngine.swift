@@ -8,6 +8,8 @@ struct API: Sendable {
     static let device = "Mac"
     /// Only ever shown as words in Settings.
     let base = URL(fileURLWithPath: "/stand-in-engine")
+    /// Empty: there is nothing to sign in to. Wink's video player names it for films seen from the iPhone.
+    let token = ""
 
     func call<T: Decodable>(_ path: String, method: String = "GET", json: (any Encodable)? = nil, raw: Data? = nil, timeout: Double = 30) async throws -> T {
         try JSONDecoder().decode(T.self, from: try await FakeEngine.answer(path, method: method, json: json))
