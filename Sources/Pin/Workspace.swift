@@ -130,7 +130,7 @@ struct CanvasEvents: NSViewRepresentable {
             didSet {
                 guard tool != oldValue else { return }
                 window?.invalidateCursorRects(for: self)
-                if tool != .comment { MainActor.assumeIsolated { model?.setHover(nil) } }
+                if tool != .comment { MainActor.assumeIsolated { model?.setHover(nil); model?.aim(nil) } }
                 // Leaving press mode takes the keys back from a screen inside a board.
                 if tool != .press, let window, LiveBoards.board(holding: window.firstResponder) != nil { window.makeFirstResponder(self) }
             }

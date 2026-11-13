@@ -68,6 +68,10 @@ struct Pick: Equatable {
     @ObservationIgnored var onHover: (() -> Void)?
     @ObservationIgnored private var picking = false
     @ObservationIgnored private var nextHover: (point: CGPoint, spot: NSPoint)?
+    /// The board under the comment tool runs its real code even when it is shown too small to run otherwise, since only a
+    /// running board can name its elements (Damian's boards at 75% were pictures: "it didnt change anything", 13 Nov 2026).
+    @ObservationIgnored private(set) var aimed: String?
+    @ObservationIgnored var onAim: (() -> Void)?
     var showResolved = false
     var showAllVersions = false
 
@@ -514,8 +518,20 @@ struct Pick: Equatable {
     /// come in meanwhile only keep the latest.
     func hover(at point: CGPoint, inWindow spot: NSPoint) {
         guard tool == .comment, draft == nil, let app, pin(at: point) == nil,
-              let box = placed.last(where: { onScreen($0.rect).contains(point) }),
-              let board = LiveBoards.running("\(app)/\(box.id)") else { return setHover(nil) }
+              let box = placed.last(where: { onScreen($0.rect).contains(point) }) else { return setHover(nil) }
+        let key = "\(app)/\(box.id)"
+        guard let board = LiveBoards.running(key) else {
+            setHover(nil)
+            // A picture: start its code, then look again where the mouse is, even if it does not move.
+            guard aim(key) else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.aimed == key, self.hover == nil, LiveBoards.running(key) != nil else { return }
+                    self.hover(at: point, inWindow: spot)
+                }
+            }
+            return
+        }
         guard !picking else { nextHover = (point, spot); return }
         picking = true
         board.element(inWindow: spot) { [weak self] target in
@@ -527,6 +543,15 @@ struct Pick: Equatable {
                 self.hover(at: next.point, inWindow: next.spot)
             }
         }
+    }
+
+    /// Which board the comment tool points at; the stage starts it. True when that changed.
+    @discardableResult
+    func aim(_ key: String?) -> Bool {
+        guard key != aimed else { return false }
+        aimed = key
+        onAim?()
+        return true
     }
 
     func setHover(_ next: Pick?) {

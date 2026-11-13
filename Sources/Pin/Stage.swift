@@ -65,6 +65,7 @@ final class Stage: NSView {
         events.layer?.addSublayer(marks)
         model.onCamera = { [weak self] in self?.cameraMoved() }
         model.onHover = { [weak self] in self?.hoverMoved() }
+        model.onAim = { [weak self] in self?.settle() }
     }
 
     /// The comment tool's outline moved to another element (or went away).
@@ -170,10 +171,12 @@ final class Stage: NSView {
             for item in items {
                 let rect = model.onScreen(item.rect), key = "\(app)/\(item.id)"
                 // An older version of a board stays its picture: the page is only ever the current code.
+                let aimed = key == model.aimed
                 guard item.version.n == item.screen.latest?.n, LiveBoards.web(app: app, screen: item.screen.id, store: store) != nil,
-                      rect.intersects(frame), LiveBoards.runs(key, shownAt: rect.width) else { continue }
+                      rect.intersects(frame), LiveBoards.runs(key, shownAt: rect.width) || aimed else { continue }
                 let seen = rect.intersection(frame)
-                shown.append((key, seen.width * seen.height))
+                // The board under the comment tool always gets one of the running places.
+                shown.append((key, aimed ? .greatestFiniteMagnitude : seen.width * seen.height))
             }
         }
         let pages = shown.isEmpty ? [] : WebBoards.choose(shown)
@@ -186,7 +189,7 @@ final class Stage: NSView {
                 board.offScreen()
                 continue
             }
-            if LiveBoards.swiftBoard(app: app, screen: item.screen.id, store: store), LiveBoards.runs(key, shownAt: rect.width),
+            if LiveBoards.swiftBoard(app: app, screen: item.screen.id, store: store), LiveBoards.runs(key, shownAt: rect.width) || key == model.aimed,
                let view = LiveBoards.view(app: app, screen: item.screen.id, store: store) {
                 board.setLive(board.live as? SwiftBoardView ?? SwiftBoardView.make(key: key, view: view, design: item.rect.size))
             } else if pages.contains(key), let page = LiveBoards.web(app: app, screen: item.screen.id, store: store) {
