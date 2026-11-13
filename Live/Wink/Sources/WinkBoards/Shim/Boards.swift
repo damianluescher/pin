@@ -3,7 +3,7 @@ import SwiftUI
 /// What Pin loads: Wink's real screens, by board name, each with its own model and made-up data. Nothing runs the engine.
 @MainActor
 enum WinkBoards {
-    private enum Frame { case mac, phone, drawer, playbooks(String), needsYou }
+    private enum Frame { case mac, phone, drawer, playbooks(String), needsYou, advisor }
 
     private struct Spec {
         var frame = Frame.mac
@@ -21,6 +21,8 @@ enum WinkBoards {
         case "mac-start", "new-mac-side-list-with-agents": return Spec()
         // Needs you (12 Nov 2026), design only: Shim/NeedsYou.swift.
         case "new-mac-needs-you-side-list-and-buddy": return Spec(frame: .needsYou)
+        // The Fable advisor (13 Nov 2026), design only: Shim/Advisor.swift; the real code is on wink2 branch advisor-display.
+        case "new-advisor-mac-and-iphone": return Spec(frame: .advisor)
         // Playbooks (12 Nov 2026), design only: the views are in Shim/Playbooks.swift.
         case let name where name.hasPrefix("new-playbooks-"): return Spec(frame: .playbooks(String(name.dropFirst("new-playbooks-".count))))
         // A chat whose turn ended while its background job still runs (12 Nov 2026: "this looks to me like done").
@@ -147,6 +149,8 @@ enum WinkBoards {
         case .mac:
             Zoomed { Root().winkOverlays() }
                 .overlay(alignment: .topLeading) { WindowDots() }
+        case .advisor:
+            Zoomed { AdvisorBoard().winkOverlays() }
         case .needsYou:
             Zoomed { NeedsYouBoard().winkOverlays() }.overlay(alignment: .topLeading) { WindowDots() }
         case .playbooks(let which):

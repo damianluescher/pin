@@ -75,3 +75,9 @@ enum FakeEngine {
 
     private struct MediaAnswer: Encodable { let length: Double; let siblings: [String]; let path: String }
 }
+
+/// In place of wink2's problem reports: a board reports nothing anywhere.
+@MainActor final class ProblemReport {
+    static let shared = ProblemReport()
+    func note(_ kind: String, _ detail: String = "") {}
+}
