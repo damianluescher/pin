@@ -142,6 +142,15 @@ do {
                 let picture = screen.versions.first { $0.n == t.version }.map { store.picture(app: t.app, screen: t.screen, version: $0).path } ?? ""
                 print("\(t.id)  \(t.app)/\(t.screen) v\(t.version)\(t.version == screen.latest?.n ? "" : " (older version)")\(t.resolved ? " (done)" : "")  at \(Int(t.x * 100))% across, \(Int(t.y * 100))% down")
                 if let source = screen.source { print("  code: \(source)") }
+                if let target = t.target {
+                    // The element he clicked, so the agent changes that piece and not whatever sits near the dot.
+                    var line = "  on: \(target.title)"
+                    if let selector = target.selector { line += "  selector: \(selector)" }
+                    if let id = target.identifier { line += "  identifier: \(id)" }
+                    print(line)
+                    if let source = target.source { print("  element code: \(source)") }
+                    if let page = target.page { print("  page: \(page)") }
+                }
                 print("  picture: \(picture)")
                 for m in t.messages { print("  \(m.author): \(m.text)") }
             }

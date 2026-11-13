@@ -48,6 +48,47 @@ public struct Message: Codable, Equatable, Identifiable, Sendable {
     public var at: Date
 }
 
+/// The piece of the screen a comment is about: the element he clicked on a running board, not just a spot (Damian, 13 Nov 2026:
+/// "ui elements are clickable", after Claude's design canvas where a comment sticks to the clicked element). Older comments have none.
+public struct Target: Codable, Equatable, Sendable {
+    /// "web" for a web board, "swift" for a SwiftUI board.
+    public var kind: String
+    /// What it is: an HTML tag ("button", "a", "li") or an accessibility role ("button", "staticText").
+    public var role: String?
+    /// The words on it: its text, or the label a screen reader would say.
+    public var text: String?
+    /// Web: a CSS selector that finds exactly this element in the page.
+    public var selector: String?
+    /// Swift: the view's accessibility identifier, when the code gives it one.
+    public var identifier: String?
+    /// The code that draws it, when the page says so (`data-source`, or React's dev build).
+    public var source: String?
+    /// Web: the page's own path and query, so the agent knows which state of the page it was.
+    public var page: String?
+    /// Where it is on the board: x, y, width and height as shares of the board's width and height.
+    public var box: [Double]?
+
+    public init(kind: String, role: String? = nil, text: String? = nil, selector: String? = nil, identifier: String? = nil,
+                source: String? = nil, page: String? = nil, box: [Double]? = nil) {
+        self.kind = kind
+        self.role = role
+        self.text = text
+        self.selector = selector
+        self.identifier = identifier
+        self.source = source
+        self.page = page
+        self.box = box
+    }
+
+    /// One line for people and agents: `button "Save"`.
+    public var title: String {
+        let what = role ?? "element"
+        guard let text, !text.isEmpty else { return what }
+        let short = text.count > 60 ? String(text.prefix(57)) + "…" : text
+        return "\(what) \"\(short)\""
+    }
+}
+
 public struct PinThread: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var app: String
@@ -59,6 +100,8 @@ public struct PinThread: Codable, Equatable, Identifiable, Sendable {
     public var resolved: Bool
     public var created: Date
     public var messages: [Message]
+    /// The element the comment sticks to, when he clicked one. The spot above stays where the dot sits.
+    public var target: Target?
 }
 
 /// One step of a flow: tapping something on one board leads to another.
@@ -252,14 +295,14 @@ public struct Store: Sendable {
     }
 
     @discardableResult
-    public func addThread(app: String, screen: String, version: Int, x: Double, y: Double, text: String, author: String) throws -> PinThread {
+    public func addThread(app: String, screen: String, version: Int, x: Double, y: Double, text: String, author: String, target: Target? = nil) throws -> PinThread {
         let found = try self.screen(app: app, id: screen)
         guard found.versions.contains(where: { $0.n == version }) else { throw PinError.notFound("version \(version) of \(screen)") }
         guard (0...1).contains(x), (0...1).contains(y) else { throw PinError.invalid("A pin must be on the picture") }
         let clean = try Self.clean(text)
         let now = Date()
         let thread = PinThread(id: Self.newID(), app: app, screen: screen, version: version, x: x, y: y, resolved: false, created: now,
-                               messages: [Message(id: Self.newID(), author: author, text: clean, at: now)])
+                               messages: [Message(id: Self.newID(), author: author, text: clean, at: now)], target: target)
         try save(thread)
         return thread
     }

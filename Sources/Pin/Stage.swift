@@ -13,13 +13,16 @@ struct StageScene: Equatable {
     var boards: [Placed]
     var pins: [Pin]
     var flows: [Flow]
+    /// The element the open comment sticks to, in canvas units.
+    var outline: CGRect?
 
-    init(app: String?, page: String?, boards: [Placed], pins: [Pin], flows: [(from: CGPoint, to: CGPoint, label: String?)]) {
+    init(app: String?, page: String?, boards: [Placed], pins: [Pin], flows: [(from: CGPoint, to: CGPoint, label: String?)], outline: CGRect? = nil) {
         self.app = app
         self.page = page
         self.boards = boards
         self.pins = pins
         self.flows = flows.map { Flow(from: $0.from, to: $0.to, label: $0.label) }
+        self.outline = outline
     }
 }
 
@@ -61,6 +64,17 @@ final class Stage: NSView {
         addSubview(events)
         events.layer?.addSublayer(marks)
         model.onCamera = { [weak self] in self?.cameraMoved() }
+        model.onHover = { [weak self] in self?.hoverMoved() }
+    }
+
+    /// The comment tool's outline moved to another element (or went away).
+    private func hoverMoved() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let pick = model.hover
+        marks.showHover(pick.flatMap { Model.outline($0.target, on: $0.placed.rect) }, label: pick?.target.title)
+        marks.update(scale: model.scale, origin: model.origin, size: bounds.size)
+        CATransaction.commit()
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { nil }
@@ -464,9 +478,27 @@ private final class MarksLayer: CALayer {
     private var flowLabels: [(layer: CALayer, flow: StageScene.Flow)] = []
     private var pins: [(layer: CALayer, spot: CGPoint)] = []
     private var flowLines: [StageScene.Flow] = []
+    /// The comment tool's outlines: the element under the mouse, and the one the open comment sticks to.
+    private let hoverLine = CAShapeLayer()
+    private let pickedLine = CAShapeLayer()
+    private let hoverTag = CALayer()
+    private var hoverRect: CGRect?
+    private var pickedRect: CGRect?
 
     override init() {
         super.init()
+        let accent = NSColor(Style.accent).cgColor
+        hoverLine.fillColor = NSColor(Style.accent).withAlphaComponent(0.08).cgColor
+        hoverLine.strokeColor = accent
+        hoverLine.lineWidth = 1.5
+        pickedLine.fillColor = NSColor(Style.accent).withAlphaComponent(0.14).cgColor
+        pickedLine.strokeColor = accent
+        pickedLine.lineWidth = 2
+        hoverTag.contentsScale = 2
+        hoverTag.isHidden = true
+        addSublayer(hoverLine)
+        addSublayer(pickedLine)
+        addSublayer(hoverTag)
         flows.fillColor = nil
         flows.strokeColor = NSColor(white: 1, alpha: 0.42).cgColor
         flows.lineWidth = 1.5
@@ -498,7 +530,19 @@ private final class MarksLayer: CALayer {
         }
         labels.forEach { addSublayer($0.layer) }
         flowLabels.forEach { addSublayer($0.layer) }
+        pickedRect = scene.outline
         pins.forEach { addSublayer($0.layer) }
+    }
+
+    @MainActor func showHover(_ rect: CGRect?, label: String?) {
+        hoverRect = rect
+        if rect != nil, let label, let made = Self.tagPicture(label) {
+            hoverTag.contents = made.image
+            hoverTag.bounds = CGRect(origin: .zero, size: made.size)
+            hoverTag.isHidden = false
+        } else {
+            hoverTag.isHidden = true
+        }
     }
 
     func update(scale: CGFloat, origin: CGPoint, size: CGSize) {
@@ -520,6 +564,18 @@ private final class MarksLayer: CALayer {
             let p = screen(spot), shown = view.contains(p)
             if layer.isHidden == shown { layer.isHidden = !shown }
             if shown { layer.position = CGPoint(x: p.x, y: y(p.y)) }
+        }
+        func box(_ rect: CGRect) -> CGRect {
+            let a = screen(rect.origin), w = rect.width * scale, h = rect.height * scale
+            return CGRect(x: a.x, y: flip ? size.height - a.y - h : a.y, width: w, height: h)
+        }
+        hoverLine.path = hoverRect.map { CGPath(roundedRect: box($0).insetBy(dx: -2, dy: -2), cornerWidth: 4, cornerHeight: 4, transform: nil) }
+        pickedLine.path = pickedRect.map { CGPath(roundedRect: box($0).insetBy(dx: -2, dy: -2), cornerWidth: 4, cornerHeight: 4, transform: nil) }
+        if let hoverRect, !hoverTag.isHidden {
+            // The name sits just above the outline's corner, or inside it at the top of the window.
+            let corner = screen(hoverRect.origin), tag = hoverTag.bounds.size
+            let top = corner.y - 6 - tag.height >= 0 ? corner.y - 6 - tag.height / 2 : corner.y + 6 + tag.height / 2
+            hoverTag.position = CGPoint(x: corner.x - 2 + tag.width / 2, y: y(top))
         }
         guard !flowLines.isEmpty else {
             if flows.path != nil { flows.path = nil; ports.path = nil }
@@ -558,6 +614,26 @@ private final class MarksLayer: CALayer {
         let image = renderer.cgImage
         pinCache[key] = image
         return image
+    }
+
+    /// The outline's name tag: dark words on the accent colour, like the selection in a design tool.
+    private static func tagPicture(_ text: String) -> (image: CGImage, size: CGSize)? {
+        let string = NSAttributedString(string: text, attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.black])
+        let pad = CGSize(width: 8, height: 3)
+        let size = CGSize(width: ceil(string.size().width) + pad.width * 2, height: ceil(string.size().height) + pad.height * 2)
+        let context = CGContext(data: nil, width: Int(size.width * 2), height: Int(size.height * 2), bitsPerComponent: 8, bytesPerRow: 0,
+                                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        guard let context else { return nil }
+        context.scaleBy(x: 2, y: 2)
+        context.setFillColor(NSColor(Style.accent).cgColor)
+        context.addPath(CGPath(roundedRect: CGRect(origin: .zero, size: size), cornerWidth: 5, cornerHeight: 5, transform: nil))
+        context.fillPath()
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        string.draw(at: CGPoint(x: pad.width, y: pad.height))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let image = context.makeImage() else { return nil }
+        return (image, size)
     }
 
     private static func textWidth(_ layer: CALayer) -> CGFloat { (layer.value(forKey: "fullWidth") as? CGFloat) ?? layer.bounds.width }

@@ -52,7 +52,11 @@ struct PinApp: App {
                         if env["PIN_PRESS"] != nil {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { PressCheck(model: model, folder: out).start() }
                         }
-                        if env["PIN_PRESS"] == nil, env["PIN_FILM"] == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                        // For checking: PIN_PICK=board:x:y,... hovers and clicks those spots with the comment tool. See PickCheck.
+                        if let list = env["PIN_PICK"] {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { PickCheck(model: model, folder: out, list: list).start() }
+                        }
+                        if env["PIN_PRESS"] == nil, env["PIN_FILM"] == nil, env["PIN_PICK"] == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
                             guard let frame = NSApp.windows.first(where: { $0.isVisible })?.contentView?.superview,
                                   let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else { return }
                             frame.cacheDisplay(in: frame.bounds, to: rep)
@@ -344,6 +348,115 @@ final class Bench: NSObject {
         print("frames per second \(Int(Double(sorted.count) / sorted.reduce(0, +) * 1000)), typical \(String(format: "%.1f", typical)) ms, worst \(Int(sorted.last ?? 0)) ms, late \(late) of \(sorted.count); one step on the main thread: typical \(String(format: "%.2f", cost[cost.count / 2])) ms, worst \(String(format: "%.2f", cost.last ?? 0)) ms")
         fflush(stdout)
         exit(0)
+    }
+}
+
+/// `PIN_SHOT=FOLDER PIN_APP=A PIN_PICK=board:x:y,... Pin`: for each spot (the board's design points), moves the real mouse
+/// there in the comment tool, prints the element the outline found and saves a picture, then clicks, posts a comment and
+/// saves the open comment with its outline. Use a PIN_HOME copy: it writes comments.
+@MainActor
+final class PickCheck {
+    let model: Model
+    let folder: String
+    let spots: [(board: String, x: CGFloat, y: CGFloat)]
+    private var steps: [(Double, () -> Void)] = []
+
+    init(model: Model, folder: String, list: String) {
+        self.model = model
+        self.folder = folder
+        spots = list.split(separator: ",").compactMap { item in
+            let parts = item.split(separator: ":").map(String.init)
+            guard parts.count == 3, let x = Double(parts[1]), let y = Double(parts[2]) else { return nil }
+            return (parts[0], CGFloat(x), CGFloat(y))
+        }
+    }
+
+    private var window: NSWindow? { NSApp.windows.first { $0.isVisible && $0.contentView != nil } }
+    private func say(_ text: String) { print("PICK", text); fflush(stdout) }
+    private func then(_ wait: Double = 0.8, _ work: @escaping () -> Void) { steps.append((wait, work)) }
+    private func run() {
+        guard !steps.isEmpty else { exit(0) }
+        let (wait, work) = steps.removeFirst()
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { MainActor.assumeIsolated { work(); self.run() } }
+    }
+
+    private func eventView(in view: NSView?) -> NSView? {
+        guard let view else { return nil }
+        if view is CanvasEvents.EventView { return view }
+        for child in view.subviews { if let found = eventView(in: child) { return found } }
+        return nil
+    }
+
+    private func spot(_ item: Placed, _ x: CGFloat, _ y: CGFloat) -> NSPoint? {
+        guard let window, let canvas = eventView(in: window.contentView) else { return nil }
+        return canvas.convert(model.onScreen(CGPoint(x: item.rect.minX + x, y: item.rect.minY + y)), to: nil)
+    }
+
+    private func mouse(_ kind: NSEvent.EventType, _ at: NSPoint) {
+        guard let window, let event = NSEvent.mouseEvent(with: kind, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: kind == .mouseMoved ? 0 : 1) else { return }
+        NSApp.postEvent(event, atStart: false)
+    }
+
+    private typealias Capture = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
+    private static let capture: Capture? = {
+        let library = dlopen("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", RTLD_NOW)
+        return dlsym(library, "CGWindowListCreateImage").map { unsafeBitCast($0, to: Capture.self) }
+    }()
+
+    /// The window as the screen shows it, web pages included.
+    private func shoot(_ name: String) {
+        guard let window, let image = Self.capture?(.null, 1 << 3, UInt32(window.windowNumber), 1 << 0 | 1 << 3)?.takeRetainedValue() else { return say("no picture") }
+        let rep = NSBitmapImageRep(cgImage: image)
+        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: folder).appendingPathComponent(name + ".png"))
+    }
+
+    private func describe(_ target: Target?) -> String {
+        guard let target, let data = try? JSONEncoder().encode(target) else { return "none" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    func start() {
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+        let zoom = CGFloat(Double(ProcessInfo.processInfo.environment["PIN_ZOOM"] ?? "") ?? 0.8)
+        for (n, item) in spots.enumerated() {
+            then(1) {
+                guard let box = self.model.placed.last(where: { $0.screen.id == item.board }) else { return self.say("no board \(item.board)") }
+                self.model.reveal(box.screen)
+                self.model.zoom(by: zoom / self.model.scale, at: .zero)
+                self.model.look(scale: zoom, origin: CGPoint(x: 60 - box.rect.minX * zoom, y: 40 - box.rect.minY * zoom))
+                self.model.tool = .comment
+            }
+            // Time for the board to start and draw.
+            then(3) {
+                guard let box = self.model.placed.last(where: { $0.screen.id == item.board }), let at = self.spot(box, item.x, item.y),
+                      let window = self.window, let canvas = self.eventView(in: window.contentView),
+                      let move = NSEvent.mouseEvent(with: .mouseMoved, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                    windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 0, pressure: 0) else { return }
+                // Straight to the canvas: the system only sends moves where the real pointer is, and nobody is at the Mac.
+                canvas.mouseMoved(with: move)
+            }
+            then(1) {
+                self.say("\(item.board) hover at \(item.x),\(item.y): \(self.describe(self.model.hover?.target))")
+                self.shoot("\(n + 1)-hover-\(item.board)")
+                guard let box = self.model.placed.last(where: { $0.screen.id == item.board }), let at = self.spot(box, item.x, item.y) else { return }
+                self.mouse(.leftMouseDown, at)
+                self.mouse(.leftMouseUp, at)
+            }
+            then(1) {
+                guard let draft = self.model.draft, let app = self.model.app else { return self.say("no draft") }
+                self.say("\(item.board) picked: \(self.describe(draft.target))")
+                let made = self.model.change {
+                    try $0.addThread(app: app, screen: draft.placed.screen.id, version: draft.placed.version.n, x: draft.x, y: draft.y,
+                                     text: n == 0 ? "Make this row a bit taller" : "Rename this", author: "Damian", target: draft.target)
+                }
+                self.model.draft = nil
+                self.model.selected = made?.id
+            }
+            then(1.2) { self.shoot("\(n + 1)-posted-\(item.board)") }
+        }
+        then(0.5) { self.say("done"); exit(0) }
+        run()
     }
 }
 

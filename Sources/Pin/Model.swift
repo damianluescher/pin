@@ -17,6 +17,14 @@ struct Draft: Equatable {
     let placed: Placed
     let x: Double
     let y: Double
+    /// The element under the click on a running board; nil keeps it a plain spot, as on pictures.
+    var target: Target?
+}
+
+/// What the comment tool would stick to: the element under the mouse on a running board.
+struct Pick: Equatable {
+    let placed: Placed
+    let target: Target
 }
 
 /// The app's state. Rereads the files every two seconds, so what an agent writes shows up by itself.
@@ -54,6 +62,12 @@ struct Draft: Equatable {
     var viewport = CGSize(width: 800, height: 600)
     var selected: String?
     var draft: Draft?
+    /// The element under the mouse in the comment tool, outlined on the canvas. Changes with every move, so it is drawn
+    /// straight into the stage and no view watches it.
+    @ObservationIgnored private(set) var hover: Pick?
+    @ObservationIgnored var onHover: (() -> Void)?
+    @ObservationIgnored private var picking = false
+    @ObservationIgnored private var nextHover: (point: CGPoint, spot: NSPoint)?
     var showResolved = false
     var showAllVersions = false
 
@@ -468,8 +482,9 @@ struct Draft: Equatable {
         return LiveBoards.running("\(app)/\(box.id)")?.pressTarget(inWindow: spot)
     }
 
-    /// A click on the canvas: a pin opens, a board takes a new comment, empty space closes what is open.
-    func click(at point: CGPoint) {
+    /// A click on the canvas: a pin opens, a board takes a new comment, empty space closes what is open. In the comment tool a
+    /// click on a running board sticks the comment to the element under it (Damian, 13 Nov 2026: "ui elements are clickable").
+    func click(at point: CGPoint, inWindow spot: NSPoint? = nil) {
         if let hit = pin(at: point) {
             selected = hit.id
             draft = nil
@@ -482,7 +497,54 @@ struct Draft: Equatable {
             return
         }
         let rect = onScreen(box.rect)
-        draft = Draft(placed: box, x: (point.x - rect.minX) / rect.width, y: (point.y - rect.minY) / rect.height)
+        let x = (point.x - rect.minX) / rect.width, y = (point.y - rect.minY) / rect.height
+        var made = Draft(placed: box, x: x, y: y)
+        if let hover, hover.placed == box, Self.contains(hover.target, x, y) { made.target = hover.target }
+        draft = made
+        setHover(nil)
+        // No outline yet (a click without moving first): ask the board now and add it when it answers.
+        guard made.target == nil, let spot, let app, let board = LiveBoards.running("\(app)/\(box.id)") else { return }
+        board.element(inWindow: spot) { [weak self] target in
+            guard let self, let target, let open = self.draft, open.placed == box, open.x == x, open.y == y else { return }
+            self.draft?.target = target
+        }
+    }
+
+    /// The comment tool's outline follows the mouse over running boards. One question to a board at a time: moves that
+    /// come in meanwhile only keep the latest.
+    func hover(at point: CGPoint, inWindow spot: NSPoint) {
+        guard tool == .comment, draft == nil, let app, pin(at: point) == nil,
+              let box = placed.last(where: { onScreen($0.rect).contains(point) }),
+              let board = LiveBoards.running("\(app)/\(box.id)") else { return setHover(nil) }
+        guard !picking else { nextHover = (point, spot); return }
+        picking = true
+        board.element(inWindow: spot) { [weak self] target in
+            guard let self else { return }
+            self.picking = false
+            if self.tool == .comment, self.draft == nil { self.setHover(target.map { Pick(placed: box, target: $0) }) }
+            if let next = self.nextHover {
+                self.nextHover = nil
+                self.hover(at: next.point, inWindow: next.spot)
+            }
+        }
+    }
+
+    func setHover(_ next: Pick?) {
+        guard next != hover else { return }
+        hover = next
+        onHover?()
+    }
+
+    /// Whether a spot (shares of the board) lies in the element's box.
+    static func contains(_ target: Target, _ x: Double, _ y: Double) -> Bool {
+        guard let b = target.box, b.count == 4 else { return false }
+        return x >= b[0] - 0.002 && x <= b[0] + b[2] + 0.002 && y >= b[1] - 0.002 && y <= b[1] + b[3] + 0.002
+    }
+
+    /// The element's box on the canvas, in canvas units.
+    static func outline(_ target: Target?, on rect: CGRect) -> CGRect? {
+        guard let b = target?.box, b.count == 4, b[2] > 0, b[3] > 0 else { return nil }
+        return CGRect(x: rect.minX + rect.width * b[0], y: rect.minY + rect.height * b[1], width: rect.width * b[2], height: rect.height * b[3])
     }
 
     // MARK: Files

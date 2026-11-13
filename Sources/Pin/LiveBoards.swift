@@ -177,6 +177,8 @@ protocol PressableBoard: AnyObject {
     func pressTarget(inWindow spot: NSPoint) -> NSView?
     /// Whether keys typed now belong to this board instead of Pin's shortcuts.
     func isTyping(_ responder: NSResponder?) -> Bool
+    /// The element of the screen at this window point, for the comment tool, or nil when there is none to name.
+    func element(inWindow spot: NSPoint, done: @escaping @MainActor (Target?) -> Void)
 }
 
 /// SwiftUI places a click by its distance in the window from the host's corner, ignoring the camera's magnification, so a
@@ -216,6 +218,8 @@ final class SwiftBoardView: NSView, PressableBoard {
 
     private init(key: String, view: AnyView, design: CGSize) {
         self.key = key
+        // Before the screen is built, so the comment tool's first hover already finds its elements.
+        Self.switchOnAccessibility()
         super.init(frame: CGRect(origin: .zero, size: design))
         let host = CameraHost(rootView: AnyView(view.frame(width: design.width, height: design.height)))
         host.sizingOptions = []
@@ -255,6 +259,70 @@ final class SwiftBoardView: NSView, PressableBoard {
     }
 
     func isTyping(_ responder: NSResponder?) -> Bool { responder is NSText }
+
+    /// What a screen reader would find at this point. SwiftUI places its accessibility frames the way it places clicks,
+    /// by window distance from the host's corner without the camera's zoom (see CameraHost), so the point goes in and the
+    /// frame comes back through the same unzoomed mapping.
+    func element(inWindow spot: NSPoint, done: @escaping @MainActor (Target?) -> Void) {
+        done(pickElement(inWindow: spot))
+    }
+
+    private func pickElement(inWindow spot: NSPoint) -> Target? {
+        guard let host, let window, bounds.width > 0, bounds.height > 0 else { return nil }
+        let local = host.convert(spot, from: nil)
+        guard host.bounds.contains(local) else { return nil }
+        let corner = host.convert(host.bounds.origin, to: nil)
+        // The window point SwiftUI thinks of for this spot, then the screen point the accessibility call wants.
+        let unzoomed = NSPoint(x: corner.x + local.x, y: corner.y - local.y)
+        let onScreen = window.convertPoint(toScreen: unzoomed)
+        Self.switchOnAccessibility()
+        var found: AnyObject? = host.accessibilityHitTest(onScreen) as AnyObject?
+        // A bare group names nothing: go up to the nearest piece with a label, a few steps at most.
+        var steps = 0
+        while let element = found, steps < 6, Self.isBare(element) {
+            found = element.accessibilityParent?() as AnyObject?
+            steps += 1
+        }
+        guard let element = found, element !== host, element !== self else { return nil }
+        let nonEmpty = { (text: String?) in text.flatMap { $0.isEmpty ? nil : $0 } }
+        let label = nonEmpty(element.accessibilityLabel?() ?? nil) ?? nonEmpty(element.accessibilityTitle?() ?? nil)
+        let identifier = nonEmpty(element.accessibilityIdentifier?() ?? nil)
+        guard label != nil || identifier != nil else { return nil }
+        let role = (element.accessibilityRole?() ?? nil).map(Self.roleName)
+        var box: [Double]?
+        if let frame = element.accessibilityFrame?(), frame.width > 0, frame.height > 0 {
+            let inWindow = window.convertFromScreen(frame)
+            // Back from SwiftUI's unzoomed window place to the board's own points (top left is zero).
+            let x = inWindow.minX - corner.x, y = corner.y - inWindow.maxY
+            let w = bounds.width, h = bounds.height
+            box = [x / w, y / h, inWindow.width / w, inWindow.height / h].map { min(max(Double($0), 0), 1) }
+        }
+        return Target(kind: "swift", role: role, text: label, identifier: identifier, box: box)
+    }
+
+    /// SwiftUI on the Mac only builds its accessibility tree while an assistive app listens. This is the flag VoiceOver sets
+    /// on an app (AXEnhancedUserInterface); without it a board answers every question with its bare host.
+    private static var accessibilityOn = false
+    private static func switchOnAccessibility() {
+        guard !accessibilityOn else { return }
+        accessibilityOn = true
+        let flag = Selector(("accessibilitySetEnhancedUserInterfaceAttribute:"))
+        if NSApp.responds(to: flag) { NSApp.perform(flag, with: NSNumber(value: true)) }
+    }
+
+    private static func isBare(_ element: AnyObject) -> Bool {
+        let label = (element.accessibilityLabel?() ?? nil) ?? ""
+        let identifier = (element.accessibilityIdentifier?() ?? nil) ?? ""
+        let role = element.accessibilityRole?() ?? nil
+        return label.isEmpty && identifier.isEmpty && (role == .group || role == .unknown || role == nil)
+    }
+
+    /// "AXButton" reads as "button".
+    private static func roleName(_ role: NSAccessibility.Role) -> String {
+        var name = role.rawValue
+        if name.hasPrefix("AX") { name.removeFirst(2) }
+        return name.prefix(1).lowercased() + name.dropFirst()
+    }
 
     /// Only called once the zoom has stopped.
     func sharpen(zoom: CGFloat) {
@@ -374,6 +442,74 @@ final class WebBoardView: NSView, PressableBoard, WKNavigationDelegate {
     })();
     """
 
+    /// Names the element at a point of the page for the comment tool: the nearest thing you would point at (a button, a link,
+    /// a field, a row, a heading), a selector that finds only it, its words, and its code when the page says where that is
+    /// (`data-source` on it or around it, or React's dev build). The point is in the page's own pixels, the board's design points.
+    private static let pickScript = """
+    window.__pinPick = function (x, y) {
+      let hit = document.elementFromPoint(x, y);
+      if (!hit || hit === document.documentElement || hit === document.body) return null;
+      const near = hit.closest('button, a, input, select, textarea, label, summary, [role], [data-pin], li, tr, td, th, h1, h2, h3, h4, h5, h6, img, svg, p');
+      const el = near && near !== document.body ? (near.closest('svg') || near) : hit;
+      const esc = (v) => window.CSS && CSS.escape ? CSS.escape(v) : v;
+      const one = (sel) => { try { return document.querySelectorAll(sel).length === 1; } catch (e) { return false; } };
+      const part = (n) => {
+        if (n.id) return '#' + esc(n.id);
+        const tag = n.tagName.toLowerCase();
+        for (const a of ['data-testid', 'data-pin', 'aria-label', 'name']) {
+          const v = n.getAttribute(a);
+          if (v) return tag + '[' + a + '="' + v.replace(/"/g, '\\\\"') + '"]';
+        }
+        const cls = [...n.classList].filter((c) => !/^(is-|has-|active|hover|focus)/.test(c)).slice(0, 2).map((c) => '.' + esc(c)).join('');
+        let s = tag + cls;
+        const p = n.parentElement;
+        if (p) {
+          const same = [...p.children].filter((c) => c.tagName === n.tagName);
+          if (same.length > 1) s += ':nth-of-type(' + (same.indexOf(n) + 1) + ')';
+        }
+        return s;
+      };
+      let selector = '', n = el;
+      for (let depth = 0; n && n !== document.documentElement && depth < 8; depth++) {
+        selector = selector ? part(n) + ' > ' + selector : part(n);
+        if (n.id || one(selector)) break;
+        n = n.parentElement;
+      }
+      const words = (el.getAttribute('aria-label') || el.getAttribute('alt') || el.getAttribute('title') ||
+        el.getAttribute('placeholder') || (el.innerText || el.textContent || el.value || '')).replace(/\\s+/g, ' ').trim().slice(0, 120);
+      let source = null;
+      const marked = el.closest('[data-source], [data-pin-source]');
+      if (marked) source = marked.getAttribute('data-source') || marked.getAttribute('data-pin-source');
+      if (!source) {
+        const key = Object.keys(el).find((k) => k.startsWith('__reactFiber$'));
+        for (let f = key ? el[key] : null, i = 0; f && i < 12 && !source; f = f.return, i++) {
+          if (f._debugSource) source = f._debugSource.fileName + ':' + f._debugSource.lineNumber;
+        }
+      }
+      const r = el.getBoundingClientRect();
+      const role = el.getAttribute('role') || el.tagName.toLowerCase();
+      return JSON.stringify({ role, text: words, selector, source, page: location.pathname.split('/').pop() + location.search + location.hash,
+        box: [r.left / innerWidth, r.top / innerHeight, r.width / innerWidth, r.height / innerHeight] });
+    };
+    """
+
+    private struct Picked: Decodable { let role: String?, text: String?, selector: String?, source: String?, page: String?, box: [Double]? }
+
+    func element(inWindow spot: NSPoint, done: @escaping @MainActor (Target?) -> Void) {
+        guard loaded, bounds.width > 0 else { return done(nil) }
+        let p = convert(spot, from: nil)
+        guard bounds.contains(p) else { return done(nil) }
+        let x = p.x / bounds.width * design.width, y = p.y / bounds.height * design.height
+        web.callAsyncJavaScript("return window.__pinPick ? window.__pinPick(x, y) : null", arguments: ["x": x, "y": y], in: nil, in: .page) { result in
+            MainActor.assumeIsolated {
+                guard case .success(let value) = result, let text = value as? String,
+                      let found = try? JSONDecoder().decode(Picked.self, from: Data(text.utf8)) else { return done(nil) }
+                done(Target(kind: "web", role: found.role, text: found.text.flatMap { $0.isEmpty ? nil : $0 }, selector: found.selector,
+                            source: found.source, page: found.page, box: found.box?.map { min(max($0, 0), 1) }))
+            }
+        }
+    }
+
     /// The page he left keeps its place; otherwise a new one starts.
     static func make(key: String, page: WebBoard, design: CGSize) -> WebBoardView {
         let board = WebBoards.keptView(key) ?? WebBoardView(key: key, page: page, design: design)
@@ -394,6 +530,7 @@ final class WebBoardView: NSView, PressableBoard, WKNavigationDelegate {
         config.userContentController.add(focus, name: "pinFocus")
         config.userContentController.addUserScript(WKUserScript(source: Self.focusScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController.addUserScript(WKUserScript(source: Self.noBarScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: Self.pickScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         web = WKWebView(frame: CGRect(origin: .zero, size: design), configuration: config)
         super.init(frame: CGRect(origin: .zero, size: design))
         focus.board = self

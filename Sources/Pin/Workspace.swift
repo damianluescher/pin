@@ -24,12 +24,18 @@ struct Canvas: View {
             return StageScene.Pin(number: model.number(of: thread), chosen: model.selected == thread.id, faded: thread.resolved,
                                   spot: CGPoint(x: box.rect.minX + box.rect.width * thread.x, y: box.rect.minY + box.rect.height * thread.y))
         }
+        var outline: CGRect?
         if let draft = model.draft {
             let rect = draft.placed.rect
             pins.append(StageScene.Pin(number: model.threads(on: draft.placed).count + 1, chosen: true, faded: false,
                                        spot: CGPoint(x: rect.minX + rect.width * draft.x, y: rect.minY + rect.height * draft.y)))
+            outline = Model.outline(draft.target, on: rect)
+        } else if let id = model.selected, let thread = model.allThreads.first(where: { $0.id == id }),
+                  let box = model.placed.first(where: { $0.screen.id == thread.screen && $0.version.n == thread.version }) {
+            // The open comment shows which element it sticks to.
+            outline = Model.outline(thread.target, on: box.rect)
         }
-        return StageScene(app: model.app, page: model.page, boards: model.placed, pins: pins, flows: model.flowLines)
+        return StageScene(app: model.app, page: model.page, boards: model.placed, pins: pins, flows: model.flowLines, outline: outline)
     }
 }
 
@@ -124,6 +130,7 @@ struct CanvasEvents: NSViewRepresentable {
             didSet {
                 guard tool != oldValue else { return }
                 window?.invalidateCursorRects(for: self)
+                if tool != .comment { MainActor.assumeIsolated { model?.setHover(nil) } }
                 // Leaving press mode takes the keys back from a screen inside a board.
                 if tool != .press, let window, LiveBoards.board(holding: window.firstResponder) != nil { window.makeFirstResponder(self) }
             }
@@ -160,6 +167,26 @@ struct CanvasEvents: NSViewRepresentable {
             }
         }
         override func viewDidMoveToWindow() { window?.makeFirstResponder(self) }
+
+        // The comment tool outlines the element under the mouse, so it needs every move, not only drags.
+        private var tracking: NSTrackingArea?
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let tracking { removeTrackingArea(tracking) }
+            let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+            addTrackingArea(area)
+            tracking = area
+        }
+
+        override func mouseMoved(with event: NSEvent) {
+            guard tool == .comment else { return }
+            let point = here(event), spot = event.locationInWindow
+            MainActor.assumeIsolated { model?.hover(at: point, inWindow: spot) }
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            MainActor.assumeIsolated { model?.setHover(nil) }
+        }
 
         private func here(_ event: NSEvent) -> CGPoint { convert(event.locationInWindow, from: nil) }
 
@@ -209,7 +236,7 @@ struct CanvasEvents: NSViewRepresentable {
         override func mouseUp(with event: NSEvent) {
             MainActor.assumeIsolated {
                 if movingBoard { model?.endMove() }
-                if !dragged { model?.click(at: here(event)) }
+                if !dragged { model?.click(at: here(event), inWindow: event.locationInWindow) }
             }
             movingBoard = false
             pressed = nil
@@ -229,6 +256,7 @@ struct NewComment: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if let target = draft.target { ElementChip(target: target) }
             TextField("Write a comment", text: $text, axis: .vertical)
                 .textFieldStyle(.plain).font(Style.body).foregroundStyle(Style.ink).lineLimit(1...8).focused($writing)
                 .onKeyPress(.return, phases: .down) { press in
@@ -267,7 +295,8 @@ struct NewComment: View {
     private func save() {
         guard !empty, let app = model.app else { return }
         let saved = model.change {
-            try $0.addThread(app: app, screen: draft.placed.screen.id, version: draft.placed.version.n, x: draft.x, y: draft.y, text: text, author: "Damian")
+            try $0.addThread(app: app, screen: draft.placed.screen.id, version: draft.placed.version.n, x: draft.x, y: draft.y, text: text, author: "Damian",
+                             target: model.draft?.target ?? draft.target)
         }
         if saved != nil { model.draft = nil }
     }
@@ -291,6 +320,7 @@ struct ThreadBubble: View {
                 icon("xmark", "Close") { model.selected = nil }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
+            if let target = thread.target { ElementChip(target: target).padding(.horizontal, 12).padding(.bottom, 8) }
             Divider().overlay(Style.line)
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -338,6 +368,21 @@ struct ThreadBubble: View {
     private func send() {
         guard !reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         if model.change({ try $0.reply(thread: thread.id, text: reply, author: "Damian") }) != nil { reply = "" }
+    }
+}
+
+/// Which element a comment sticks to, as a small label: the outline's colour and what it is called.
+struct ElementChip: View {
+    let target: Target
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: target.kind == "web" ? "cursorarrow.rays" : "square.dashed").font(.system(size: 11, weight: .semibold))
+            Text(target.title).font(Style.small.weight(.medium)).lineLimit(1).truncationMode(.tail)
+        }
+        .foregroundStyle(Style.accent)
+        .padding(.horizontal, Style.tight).padding(.vertical, 4)
+        .background(Capsule().fill(Style.accent.opacity(0.14)))
+        .help(target.selector ?? target.identifier ?? target.title)
     }
 }
 
@@ -403,7 +448,8 @@ struct CommentsPanel: View {
     }
 
     private func detail(_ thread: PinThread) -> String {
-        let name = thread.screen == Store.general ? "Whole file" : model.screens.first { $0.id == thread.screen }?.name ?? thread.screen
+        var name = thread.screen == Store.general ? "Whole file" : model.screens.first { $0.id == thread.screen }?.name ?? thread.screen
+        if let target = thread.target { name += " · \(target.title)" }
         let replies = thread.messages.count - 1
         return replies > 0 ? "\(name) · \(replies) \(replies == 1 ? "reply" : "replies")" : name
     }
