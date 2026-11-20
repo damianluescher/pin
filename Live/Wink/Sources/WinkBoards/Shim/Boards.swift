@@ -3,7 +3,7 @@ import SwiftUI
 /// What Pin loads: Wink's real screens, by board name, each with its own model and made-up data. Nothing runs the engine.
 @MainActor
 enum WinkBoards {
-    private enum Frame { case mac, phone, drawer, playbooks(String), needsYou, advisor, voice, review, loops }
+    private enum Frame { case mac, phone, drawer, playbooks(String), needsYou, advisor, voice, review, loops, saves }
 
     private struct Spec {
         var frame = Frame.mac
@@ -29,6 +29,8 @@ enum WinkBoards {
         case "new-review-page-mac-and-iphone": return Spec(frame: .review)
         // Loops overview (20 Nov 2026), design only: Shim/Loops.swift.
         case "new-loops-overview-mac-and-iphone": return Spec(frame: .loops)
+        // Saves, our own mymind (20 Nov 2026), design only: Shim/Saves.swift; plan ~/Documents/Research/own-mymind.md.
+        case "new-saves-mac-and-iphone": return Spec(frame: .saves)
         // Playbooks (12 Nov 2026), design only: the views are in Shim/Playbooks.swift.
         case let name where name.hasPrefix("new-playbooks-"): return Spec(frame: .playbooks(String(name.dropFirst("new-playbooks-".count))))
         // A chat whose turn ended while its background job still runs (12 Nov 2026: "this looks to me like done").
@@ -159,6 +161,8 @@ enum WinkBoards {
             Zoomed { ReviewPageBoard().winkOverlays() }
         case .loops:
             Zoomed { LoopsBoard().winkOverlays() }
+        case .saves:
+            Zoomed { SavesBoard().winkOverlays() }
         case .voice:
             Zoomed { VoiceModeBoard().winkOverlays() }
         case .advisor:
