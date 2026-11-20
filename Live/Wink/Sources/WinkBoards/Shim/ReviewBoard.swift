@@ -9,7 +9,7 @@ import SwiftUI
 
 private enum Gate: String { case plan = "Plan", result = "Result", out = "Goes out", stuck = "Stopped" }
 
-private struct ReviewItem {
+private struct BoardReviewItem {
     let gate: Gate
     let job: String
     let stage: String
@@ -19,14 +19,14 @@ private struct ReviewItem {
     enum Proof { case video(String), board, draft(String), diff, reason(String), steps([String]) }
 }
 
-private let items: [ReviewItem] = [
-    ReviewItem(gate: .result, job: "EHL portrait: Brankica", stage: "Rough cut", what: "Rough cut v3, 2:14, chapters set", proof: .video("Brankica_v3.mp4 · 2:14"), age: "2 h"),
-    ReviewItem(gate: .plan, job: "LUT Cam launch reel", stage: "Plan", what: "Plan: 5 shots, 20 s, music with a drop at 0:08",
+private let items: [BoardReviewItem] = [
+    BoardReviewItem(gate: .result, job: "EHL portrait: Brankica", stage: "Rough cut", what: "Rough cut v3, 2:14, chapters set", proof: .video("Brankica_v3.mp4 · 2:14"), age: "2 h"),
+    BoardReviewItem(gate: .plan, job: "LUT Cam launch reel", stage: "Plan", what: "Plan: 5 shots, 20 s, music with a drop at 0:08",
                proof: .steps(["Hook: the phone screen flips to the grade", "Three before/after shots", "Price and App Store badge"]), age: "1 h"),
-    ReviewItem(gate: .out, job: "Invoice for Patrick", stage: "Send", what: "Mail to Patrick (Ella Ciao), from damian@yoveo.ch",
+    BoardReviewItem(gate: .out, job: "Invoice for Patrick", stage: "Send", what: "Mail to Patrick (Ella Ciao), from damian@yoveo.ch",
                proof: .draft("Hoi Patrick, anbei die Rechnung für Fokus Empathie. Liebe Grüsse, Damian"), age: "40 min"),
-    ReviewItem(gate: .result, job: "Wink: waiting ring", stage: "Board", what: "Pin board: grey ring for a chat waiting on its job", proof: .board, age: "25 min"),
-    ReviewItem(gate: .stuck, job: "mymind sprint: AI video", stage: "Download", what: "Stopped: Instagram refused downloads twice",
+    BoardReviewItem(gate: .result, job: "Wink: waiting ring", stage: "Board", what: "Pin board: grey ring for a chat waiting on its job", proof: .board, age: "25 min"),
+    BoardReviewItem(gate: .stuck, job: "mymind sprint: AI video", stage: "Download", what: "Stopped: Instagram refused downloads twice",
                proof: .reason("29 reels left. Try again tomorrow, or skip this topic."), age: "10 min"),
 ]
 
@@ -45,7 +45,7 @@ private struct Answers: View {
 }
 
 private struct Proof: View {
-    let proof: ReviewItem.Proof
+    let proof: BoardReviewItem.Proof
     var body: some View {
         switch proof {
         case .video(let name):
@@ -78,8 +78,8 @@ private struct Proof: View {
     }
 }
 
-private struct ReviewCard: View {
-    let item: ReviewItem
+private struct BoardReviewCard: View {
+    let item: BoardReviewItem
     var compact = false
     var noted = false
     var body: some View {
@@ -164,9 +164,9 @@ struct ReviewPageBoard: View {
                         }
                     }
                     Text("Oldest first. One answer per card.").font(.wink(.small)).foregroundStyle(.secondary)
-                    ReviewCard(item: items[0], noted: true)
-                    ReviewCard(item: items[1])
-                    ReviewCard(item: items[2])
+                    BoardReviewCard(item: items[0], noted: true)
+                    BoardReviewCard(item: items[1])
+                    BoardReviewCard(item: items[2])
                     Answered()
                 }
                 .padding(24)
@@ -177,8 +177,8 @@ struct ReviewPageBoard: View {
                 Text("iPhone · same list").font(.wink(.label)).foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Review").font(.wink(.title))
-                    ReviewCard(item: items[3], compact: true)
-                    ReviewCard(item: items[4], compact: true)
+                    BoardReviewCard(item: items[3], compact: true)
+                    BoardReviewCard(item: items[4], compact: true)
                     Spacer()
                 }
                 .padding(16)
