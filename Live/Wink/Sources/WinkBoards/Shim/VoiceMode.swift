@@ -10,7 +10,7 @@ private enum VoiceState: String { case listening = "Listening", thinking = "Thin
 
 /// Buddy's face with soft rings that show the state: rings move with his voice while listening, a slow pulse while thinking,
 /// rings move with Buddy's voice while speaking.
-private struct VoiceFace: View {
+private struct BoardVoiceFace: View {
     let state: VoiceState
     var size: CGFloat = 120
     var body: some View {
@@ -52,7 +52,7 @@ private struct VoiceView: View {
     var body: some View {
         VStack(spacing: 20) {
             Spacer()
-            VoiceFace(state: state, size: phone ? 96 : 120)
+            BoardVoiceFace(state: state, size: phone ? 96 : 120)
             Text(state.rawValue).font(.wink(.label)).foregroundStyle(.secondary)
             Text(caption).font(.wink(.body)).multilineTextAlignment(.center).frame(maxWidth: phone ? 280 : 420).lineLimit(3)
             Spacer()
