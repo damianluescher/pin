@@ -161,7 +161,7 @@ private struct SMOptionB: View {
             .padding(.top, 28)
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                Text("Search smChats").foregroundStyle(.secondary)
+                Text("Search chats").foregroundStyle(.secondary)
                 Spacer()
                 Text("⌘K").font(.wink(.small)).foregroundStyle(.secondary)
             }
@@ -240,10 +240,10 @@ struct SideMenuBoard: View {
     var body: some View {
         if option == "a" {
             SMFrame(title: "Side menu A · one quiet column",
-                  note: "Buddy replaces the wordmark at the top left; its card at the foot goes. New chat and Search become two plain lines, the four pages one tight group, smChats in Pinned and Recent. 28 to 32 points between groups. Foot: only your name and Settings.") { SMOptionA() }
+                  note: "Buddy replaces the wordmark at the top left; its card at the foot goes. New chat and Search become two plain lines, the four pages one tight group, chats in Pinned and Recent. 28 to 32 points between groups. Foot: only your name and Settings.") { SMOptionA() }
         } else {
             SMFrame(title: "Side menu B · Buddy as home, pages as tiles",
-                  note: "Buddy at the top left with New chat beside it. Tasks, Review, Automations and Agents as four small tiles with their counts (words kept). Search sits right above the smChats; one chat list, pinned first with a pin. No foot at all: your name and Settings move into Buddy's menu.") { SMOptionB() }
+                  note: "Buddy at the top left with New chat beside it. Tasks, Review, Automations and Agents as four small tiles with their counts (words kept). Search sits right above the chats; one chat list, pinned first with a pin. No foot at all: your name and Settings move into Buddy's menu.") { SMOptionB() }
         }
     }
 }
