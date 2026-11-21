@@ -41,6 +41,18 @@ enum FakeEngine {
         case "/tasks": return try encoded(Fixtures.todos)
         case "/jobs": return try encoded(Fixtures.jobs)
         case "/agents": return try encoded(Fixtures.agents)
+        // Made-up loops for the Loops board (Yoveo film is his real loop file; the rest are the board's examples).
+        case "/loops":
+            let now = Date().timeIntervalSince1970
+            return try encoded(LoopsOverview(
+                loops: [LoopInfo(name: "yoveo-film", title: "Yoveo film", file: "yoveo-film.md",
+                                 stages: ["Select footage", "Rough cut", "Fixes from his notes", "Final cut", "Export and hand over"], gates: [1, 3, 4], running: 2, done: 3),
+                        LoopInfo(name: "app-fix", title: "App fix", file: "app-fix.md", stages: ["Find cause", "Fix", "Check", "Install"], gates: [3], running: 1, done: 9)],
+                runs: [LoopRunInfo(task: "t1", job: "EHL portrait: Brankica", loop: "yoveo-film", title: "Yoveo film", stage: 1, chat: "video", since: now - 7200, waits: true, paused: false),
+                       LoopRunInfo(task: "t2", job: "Wink: voice answers", loop: "app-fix", title: "App fix", stage: 2, chat: "working", since: now - 1200, waits: false, paused: false),
+                       LoopRunInfo(task: "t3", job: "EHL portrait: Ugo", loop: "yoveo-film", title: "Yoveo film", stage: 0, chat: nil, since: now - 10800, waits: false, paused: true)],
+                finished: [LoopFinished(task: "t4", job: "EHL portrait: Cindy", loop: "yoveo-film", title: "Yoveo film", output: "Cindy_final.mp4", redos: 1, at: now - 172800),
+                           LoopFinished(task: "t5", job: "Wink: end the call", loop: "app-fix", title: "App fix", output: nil, redos: 0, at: now - 3600)]))
         case "/usage": return try encoded(Fixtures.limits)
         case "/updates": return try encoded(Fixtures.versions)
         case "/connections": return try encoded(Fixtures.connections)

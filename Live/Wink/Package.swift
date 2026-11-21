@@ -12,5 +12,6 @@ let package = Package(
         .target(name: "WinkBoards",
                 exclude: ["App/Info.plist", "App/Assets.xcassets", "App/Model.swift", "App/Wink2.swift", "App/Design.swift",
                           "App/Composer.swift", "App/Review.swift", "App/Reply.swift"]),
+        .executableTarget(name: "WinkProbe", dependencies: ["WinkBoards"]),
     ]
 )

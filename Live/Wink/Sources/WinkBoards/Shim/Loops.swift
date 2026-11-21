@@ -47,7 +47,7 @@ private let finished: [Finished] = [
 ]
 
 /// The stages as dots: done filled, now white, still to come grey; a ring under the stages that stop for him.
-private struct StageDots: View {
+private struct ShimStageDots: View {
     let loop: Loop
     var now: Int? = nil
     var body: some View {
@@ -81,7 +81,7 @@ private struct RunRow: View {
                 if !compact { Image(systemName: "ellipsis").foregroundStyle(.secondary).frame(width: 24) }
             }
             HStack(spacing: 12) {
-                StageDots(loop: loop, now: run.stage)
+                ShimStageDots(loop: loop, now: run.stage)
                 Text(loop.stages[run.stage]).font(.wink(.small))
                 Spacer(minLength: 0)
             }
@@ -101,7 +101,7 @@ private struct LoopCard: View {
                 Spacer()
                 Image(systemName: "play.fill").font(.wink(.small)).foregroundStyle(.secondary)
             }
-            StageDots(loop: loop)
+            ShimStageDots(loop: loop)
             Text(loop.stages.joined(separator: " · ")).font(.wink(.small)).foregroundStyle(.secondary).lineLimit(2)
             Text("\(loop.running) running · \(loop.done) done" + (loop.file.map { " · \($0)" } ?? " · example")).font(.wink(.small)).foregroundStyle(.secondary)
         }
@@ -162,7 +162,7 @@ private struct StartSheet: View {
                 }
                 .font(.wink(.small))
             }
-            StageDots(loop: loops[0], now: 0)
+            ShimStageDots(loop: loops[0], now: 0)
             Text("Stops for you at Rough cut, Final cut and Export.").font(.wink(.small)).foregroundStyle(.secondary)
             HStack {
                 Spacer()

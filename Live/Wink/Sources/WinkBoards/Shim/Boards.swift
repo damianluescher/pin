@@ -1,8 +1,9 @@
+import CoreText
 import SwiftUI
 
 /// What Pin loads: Wink's real screens, by board name, each with its own model and made-up data. Nothing runs the engine.
 @MainActor
-enum WinkBoards {
+public enum WinkBoards {
     private enum Frame { case mac, phone, drawer, playbooks(String), needsYou, advisor, voice, review, loops, smooth, saves, sideMenu(String) }
 
     private struct Spec {
@@ -96,6 +97,9 @@ enum WinkBoards {
         case "new-mac-new-agent-via-chat": return Spec(setup: { $0.draft = "/agent watch Galaxus for a cheap Dyson under 200 CHF" })
 
         case "window-tasks": return Spec(page: .tasks, env: ["WINK_UNFOLD": "1"])
+        // The real Review and Loops pages (21 Nov 2026 refresh: the design-only boards went to the archive).
+        case "window-review": return Spec(page: .review)
+        case "window-loops": return Spec(page: .loops)
         case "window-automations": return Spec(page: .jobs, setup: { $0.chats += Fixtures.jobChats })
         case "new-mac-agents": return Spec(page: .agents)
         case "window-settings-general": return Spec(page: .settings)
@@ -126,7 +130,17 @@ enum WinkBoards {
         }
     }
 
-    static func board(_ name: String) -> AnyView {
+    /// Wink's Geist, loaded once from the app's own folder (Pin is not Wink, so Wink's bundle is not there).
+    static let fontsOnce: Void = {
+        let folder = URL(fileURLWithPath: NSHomeDirectory() + "/tools/wink2/App/Fonts")
+        for name in ["Geist-Variable.woff2", "GeistMono-Variable.woff2"] {
+            CTFontManagerRegisterFontsForURL(folder.appendingPathComponent(name) as CFURL, .process, nil)
+        }
+        WinkFonts.ready = true
+    }()
+
+    public static func board(_ name: String) -> AnyView {
+        _ = fontsOnce
         let spec = spec(name)
         let env = BoardEnv.base.merging(spec.env) { $1 }
         return BoardEnv.$current.withValue(env) {
