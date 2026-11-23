@@ -42,20 +42,22 @@ enum CanRender {
         let scene = SCNScene()
         scene.background.contents = NSColor.clear
         scene.lightingEnvironment.contents = studio()
-        scene.lightingEnvironment.intensity = 1.3
+        scene.lightingEnvironment.intensity = 0.7
         let radius: CGFloat = 1, height: CGFloat = 3.3
         let body = SCNCylinder(radius: radius, height: height)
         let side = SCNMaterial()
         side.lightingModel = .physicallyBased
         side.diffuse.contents = label
-        side.roughness.contents = 0.38
+        // Printed tin under a gloss coat: the soft window and the edge strips run down it like on a real can.
+        side.roughness.contents = 0.5
         side.metalness.contents = 0.0
-        side.clearCoat.contents = 0.6
+        side.clearCoat.contents = 0.1
+        side.clearCoatRoughness.contents = 0.45
         let cap = metal()
         body.materials = [side, cap, cap]
         let can = SCNNode(geometry: body)
         // Turn the label's front half towards the camera.
-        can.eulerAngles.y = CGFloat(Double(ProcessInfo.processInfo.environment["CAN_TURN"] ?? "") ?? 0.45)
+        can.eulerAngles.y = CGFloat(Double(ProcessInfo.processInfo.environment["CAN_TURN"] ?? "") ?? 0.3)
         scene.rootNode.addChildNode(can)
         for y in [height / 2, -height / 2] {
             let rim = SCNNode(geometry: SCNCylinder(radius: radius * 1.07, height: 0.16))
@@ -68,13 +70,25 @@ enum CanRender {
         knob.position = SCNVector3(0, height / 2 + 0.3, 0)
         scene.rootNode.addChildNode(knob)
 
-        let key = SCNNode(); key.light = SCNLight(); key.light!.type = .directional; key.light!.intensity = 900
-        key.eulerAngles = SCNVector3(-0.5, -0.7, 0); scene.rootNode.addChildNode(key)
-        let fill = SCNNode(); fill.light = SCNLight(); fill.light!.type = .ambient; fill.light!.intensity = 250
-        scene.rootNode.addChildNode(fill)
+        // Product light (Damian, 23 Nov: "redesign of each film stock with better lighting"): a big soft key from the
+        // front left shapes the cylinder (bright left, falling off to the right), a cool rim from behind on the right
+        // draws the right edge out of the dark, a low warm fill keeps the shadow side readable; soft shadows.
+        let key = SCNNode(); key.light = SCNLight(); key.light!.type = .spot
+        key.light!.intensity = 1700; key.light!.spotOuterAngle = 70; key.light!.spotInnerAngle = 20
+        key.light!.color = NSColor(red: 1, green: 0.97, blue: 0.92, alpha: 1)
+        key.position = SCNVector3(-6, 4, 7); key.look(at: SCNVector3(0, 0, 0)); scene.rootNode.addChildNode(key)
+        let rim = SCNNode(); rim.light = SCNLight(); rim.light!.type = .directional; rim.light!.intensity = 1400
+        rim.light!.color = NSColor(red: 0.85, green: 0.92, blue: 1, alpha: 1)
+        rim.position = SCNVector3(6, 2, -5); rim.look(at: SCNVector3(0, 0, 0)); scene.rootNode.addChildNode(rim)
+        let fill = SCNNode(); fill.light = SCNLight(); fill.light!.type = .omni; fill.light!.intensity = 160
+        fill.light!.color = NSColor(red: 1, green: 0.93, blue: 0.85, alpha: 1)
+        fill.position = SCNVector3(5, -1, 8); scene.rootNode.addChildNode(fill)
+        let amb = SCNNode(); amb.light = SCNLight(); amb.light!.type = .ambient; amb.light!.intensity = 15
+        scene.rootNode.addChildNode(amb)
 
         let camera = SCNNode(); camera.camera = SCNCamera(); camera.camera!.fieldOfView = 14
         camera.camera!.wantsHDR = false
+        camera.camera!.wantsExposureAdaptation = false
         camera.position = SCNVector3(0, 1.6, 17.5)
         camera.look(at: SCNVector3(0, 0.1, 0))
         scene.rootNode.addChildNode(camera)
@@ -100,10 +114,14 @@ enum CanRender {
     static func studio() -> NSImage {
         let size = NSSize(width: 1024, height: 512)
         return NSImage(size: size, flipped: false) { rect in
-            NSColor(white: 0.05, alpha: 1).setFill(); rect.fill()
-            NSGradient(colors: [NSColor(white: 0.95, alpha: 1), NSColor(white: 0.05, alpha: 1)])?
-                .draw(in: NSRect(x: 180, y: 260, width: 300, height: 200), relativeCenterPosition: .zero)
-            NSColor(white: 0.7, alpha: 1).setFill(); NSRect(x: 760, y: 120, width: 26, height: 300).fill()
+            NSColor(white: 0.03, alpha: 1).setFill(); rect.fill()
+            // A tall softbox front left (the long highlight down the can and on the rims), a thin strip back right
+            // (the rim's edge glint), a faint floor bounce.
+            // The softbox sits behind the camera's left shoulder: it lights the metal rims, not the printed label.
+            NSGradient(colors: [NSColor(white: 0.03, alpha: 1), NSColor(white: 0.9, alpha: 1), NSColor(white: 0.03, alpha: 1)])?
+                .draw(in: NSRect(x: 560, y: 300, width: 160, height: 200), angle: 0)
+            NSColor(white: 0.8, alpha: 1).setFill(); NSRect(x: 820, y: 110, width: 18, height: 320).fill()
+            NSColor(white: 0.12, alpha: 1).setFill(); NSRect(x: 0, y: 0, width: 1024, height: 60).fill()
             return true
         }
     }
