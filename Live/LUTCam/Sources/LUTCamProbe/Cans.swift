@@ -30,11 +30,13 @@ enum CanRender {
         guard let full = r.cgImage else { return nil }
         let s = CGFloat(full.width) / 120
         guard let body = full.cropping(to: CGRect(x: 0, y: 28 * s, width: 117 * s, height: 166 * s)) else { return nil }
+        // The label wraps over a bit more than the front half, so the side strip (speed, DX) is whole, not cut at the
+        // can's edge (Damian, Pin 23 Nov: "fix this").
         let w = body.width * 3, h = body.height
         guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         ctx.setFillColor(CGColor(gray: 0.06, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
-        ctx.draw(body, in: CGRect(x: body.width, y: 0, width: body.width, height: h))
+        ctx.draw(body, in: CGRect(x: (w - body.width) / 2, y: 0, width: body.width, height: h))
         // Print grain: fine light and dark specks over the whole label, like ink on tin (Damian, Pin 23 Nov: "looks cheap
         // maybe add grain texture so it feels a bit more realistic").
         var rng = SystemRandomNumberGenerator()
@@ -62,14 +64,14 @@ enum CanRender {
         let scene = SCNScene()
         scene.background.contents = NSColor.clear
         scene.lightingEnvironment.contents = studio()
-        scene.lightingEnvironment.intensity = 0.7
+        scene.lightingEnvironment.intensity = 0.45
         let radius: CGFloat = 1, height: CGFloat = 3.3
         let body = SCNCylinder(radius: radius, height: height)
         let side = SCNMaterial()
         side.lightingModel = .physicallyBased
         side.diffuse.contents = label
         // Printed tin under a gloss coat: the soft window and the edge strips run down it like on a real can.
-        side.roughness.contents = 0.5
+        side.roughness.contents = 0.42
         side.metalness.contents = 0.0
         side.clearCoat.contents = 0.1
         side.clearCoatRoughness.contents = 0.45
@@ -77,7 +79,7 @@ enum CanRender {
         body.materials = [side, cap, cap]
         let can = SCNNode(geometry: body)
         // Turn the label's front half towards the camera.
-        can.eulerAngles.y = CGFloat(Double(ProcessInfo.processInfo.environment["CAN_TURN"] ?? "") ?? 0.3)
+        can.eulerAngles.y = CGFloat(Double(ProcessInfo.processInfo.environment["CAN_TURN"] ?? "") ?? 0.0)
         scene.rootNode.addChildNode(can)
         for y in [height / 2, -height / 2] {
             let rim = SCNNode(geometry: SCNCylinder(radius: radius * 1.07, height: 0.16))
@@ -94,13 +96,13 @@ enum CanRender {
         // front left shapes the cylinder (bright left, falling off to the right), a cool rim from behind on the right
         // draws the right edge out of the dark, a low warm fill keeps the shadow side readable; soft shadows.
         let key = SCNNode(); key.light = SCNLight(); key.light!.type = .spot
-        key.light!.intensity = 1700; key.light!.spotOuterAngle = 70; key.light!.spotInnerAngle = 20
+        key.light!.intensity = 1050; key.light!.spotOuterAngle = 70; key.light!.spotInnerAngle = 20
         key.light!.color = NSColor(red: 1, green: 0.97, blue: 0.92, alpha: 1)
         key.position = SCNVector3(-6, 4, 7); key.look(at: SCNVector3(0, 0, 0)); scene.rootNode.addChildNode(key)
-        let rim = SCNNode(); rim.light = SCNLight(); rim.light!.type = .directional; rim.light!.intensity = 1400
+        let rim = SCNNode(); rim.light = SCNLight(); rim.light!.type = .directional; rim.light!.intensity = 900
         rim.light!.color = NSColor(red: 0.85, green: 0.92, blue: 1, alpha: 1)
         rim.position = SCNVector3(6, 2, -5); rim.look(at: SCNVector3(0, 0, 0)); scene.rootNode.addChildNode(rim)
-        let fill = SCNNode(); fill.light = SCNLight(); fill.light!.type = .omni; fill.light!.intensity = 160
+        let fill = SCNNode(); fill.light = SCNLight(); fill.light!.type = .omni; fill.light!.intensity = 90
         fill.light!.color = NSColor(red: 1, green: 0.93, blue: 0.85, alpha: 1)
         fill.position = SCNVector3(5, -1, 8); scene.rootNode.addChildNode(fill)
         let amb = SCNNode(); amb.light = SCNLight(); amb.light!.type = .ambient; amb.light!.intensity = 15
