@@ -190,7 +190,7 @@ struct LockScreenBoard: View {
 // For LUTCamProbe cans: every film stock's flat 4Roll drawing without the light (the 3D render lights it).
 extension LUTCamBoards {
     @MainActor public static var flatCans: [(String, AnyView)] {
-        [("pure", CanStock.pure), ("portra", .portra), ("gold", .gold), ("ektar", .ektar), ("vision", .vision), ("superia", .superia), ("velvia", .velvia), ("kodachrome", .kodachrome), ("mono", .mono)]
+        [("pure", CanStock.pure), ("portra", .portra), ("gold", .gold), ("ektar", .ektar), ("vision", .vision), ("superia", .superia), ("velvia", .velvia), ("kodachrome", .kodachrome), ("doublex", .doubleX)]
             .map { ($0.0, AnyView(Canister(stock: $0.1, flat: true))) }
     }
 }
