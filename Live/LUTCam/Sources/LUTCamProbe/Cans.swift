@@ -35,6 +35,26 @@ enum CanRender {
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         ctx.setFillColor(CGColor(gray: 0.06, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
         ctx.draw(body, in: CGRect(x: body.width, y: 0, width: body.width, height: h))
+        // Print grain: fine light and dark specks over the whole label, like ink on tin (Damian, Pin 23 Nov: "looks cheap
+        // maybe add grain texture so it feels a bit more realistic").
+        var rng = SystemRandomNumberGenerator()
+        for _ in 0..<(w * h / 9) {
+            let x = CGFloat(Int.random(in: 0..<w, using: &rng)), y = CGFloat(Int.random(in: 0..<h, using: &rng))
+            ctx.setFillColor(CGColor(gray: Bool.random(using: &rng) ? 1 : 0, alpha: CGFloat.random(in: 0.04...0.1, using: &rng)))
+            ctx.fill(CGRect(x: x, y: y, width: 2, height: 2))
+        }
+        return ctx.makeImage()
+    }
+
+    /// Brushed metal: fine horizontal streaks (rims and knob) in the roughness, so the light breaks like on a real can.
+    static func brushed(_ size: Int = 512) -> CGImage? {
+        guard let ctx = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return nil }
+        ctx.setFillColor(CGColor(gray: 0.3, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: size, height: size))
+        for y in 0..<size {
+            ctx.setFillColor(CGColor(gray: CGFloat.random(in: 0.12...0.5), alpha: 1))
+            ctx.fill(CGRect(x: 0, y: y, width: size, height: 1))
+        }
         return ctx.makeImage()
     }
 
@@ -106,7 +126,8 @@ enum CanRender {
         m.lightingModel = .physicallyBased
         m.diffuse.contents = NSColor(white: dark ? 0.25 : 0.7, alpha: 1)
         m.metalness.contents = 1.0
-        m.roughness.contents = dark ? 0.45 : 0.22
+        m.roughness.contents = brushed() ?? (dark ? 0.45 : 0.22)
+        m.roughness.intensity = dark ? 1.4 : 1.0
         return m
     }
 
