@@ -92,7 +92,7 @@ struct GuidelinesBoard: View {
     private var type: some View {
         VStack(alignment: .leading, spacing: 0) {
             typeRow("Title", "LC.Text.title · large title 34 bold", "Settings", LC.Text.title)
-            typeRow("Headline", "LC.Text.headline · title 2, 22 bold", "Kodak Portra 400", LC.Text.headline)
+            typeRow("Headline", "LC.Text.headline · title 2, 22 bold", "Kodak P400", LC.Text.headline)
             typeRow("Body", "LC.Text.body · 17 (semibold for buttons)", "Your photos never leave your phone.", LC.Text.body)
             typeRow("Label", "LC.Text.label · 15 medium, controls and grey lines", "Before you shoot", LC.Text.label)
             typeRow("Mono", "LC.Text.mono · SF Mono 15 medium, every number", "−0.7 EV · 24 mm · 3:2", LC.Text.mono, red: true)
