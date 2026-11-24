@@ -158,7 +158,7 @@ public func pinBoard(_ name: UnsafePointer<CChar>) -> UnsafeMutableRawPointer {
 }
 
 // A mock of the iPhone Lock Screen (system UI, drawn with iOS's own sizes; not part of the app).
-/// 24. Outside the app: the Lock Screen camera button opens LUT Cam; the Camera Control button changes exposure.
+/// 24. Outside the app: the Lock Screen camera button opens LUT Cam; the Camera Control button picks the look or exposure.
 struct LockScreenBoard: View {
     var body: some View {
         ZStack {
