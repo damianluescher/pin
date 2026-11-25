@@ -88,6 +88,10 @@ struct Pick: Equatable {
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+        // The AI's cursor is read often, so it moves live (`pin cursor`).
+        Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.readCursor() }
+        }
     }
 
     /// Everything read from disk in one go, so reading many boards never happens on the thread that draws.
@@ -380,12 +384,30 @@ struct Pick: Equatable {
         look(scale: next, origin: CGPoint(x: anchor.x - (anchor.x - origin.x) * change, y: anchor.y - (anchor.y - origin.y) * change))
     }
 
+    /// Where an AI works on a board right now (`pin cursor APP SCREEN X Y TEXT`): a board, a spot on it from 0 to 1, what it
+    /// does. Gone 20 s after its last move, or at once with `pin cursor APP --clear`.
+    struct AgentSpot: Equatable { var screen: String; var x: Double; var y: Double; var text: String; var who: String }
+    var agent: AgentSpot?
+
+    private func readCursor() {
+        guard let app else { if agent != nil { agent = nil }; return }
+        let file = store.home.appendingPathComponent(app).appendingPathComponent("cursor.json")
+        guard let data = try? Data(contentsOf: file), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let at = obj["at"] as? Double, Date().timeIntervalSince1970 - at < 20, let screen = obj["screen"] as? String else {
+            if agent != nil { agent = nil }
+            return
+        }
+        let next = AgentSpot(screen: screen, x: obj["x"] as? Double ?? 0.5, y: obj["y"] as? Double ?? 0.5,
+                             text: obj["text"] as? String ?? "", who: obj["who"] as? String ?? "Buddy")
+        if next != agent { agent = next }
+    }
+
     /// The one way the camera changes.
     func look(scale: CGFloat, origin: CGPoint) {
         self.scale = scale
         self.origin = origin
         onCamera?()
-        if selected != nil || draft != nil { bubbleTick &+= 1 }
+        if selected != nil || draft != nil || agent != nil { bubbleTick &+= 1 }
         showPercent()
     }
 

@@ -14,6 +14,7 @@ pin place APP SCREEN X Y     where a board sits on the canvas
 pin reply ID TEXT [--as NAME]
 pin resolve ID
 pin reopen ID
+pin cursor APP SCREEN X Y [TEXT] [--as NAME] | --clear     the AI's live cursor on a board while it works (X, Y from 0 to 1)
 pin comment APP SCREEN X Y TEXT [--version N] [--as NAME]     X and Y from 0 to 1
 pin capture web APP SCREEN URL [--size 1440x900] [--note TEXT]
 pin general APP TEXT [--as NAME]     a comment on the whole file, on no board
@@ -199,6 +200,18 @@ do {
     case "reopen":
         need(1)
         try store.setResolved(thread: args[0], false)
+    case "cursor":
+        // pin cursor APP SCREEN X Y [TEXT] [--as NAME]: the AI's cursor on that board, live in the canvas; --clear removes it.
+        need(1)
+        let file = store.home.appendingPathComponent(args[0]).appendingPathComponent("cursor.json")
+        if args.count > 1, args[1] == "--clear" { try? FileManager.default.removeItem(at: file); print("cleared"); break }
+        let who = option("--as") ?? "Buddy"
+        need(4)
+        guard let x = Double(args[2]), let y = Double(args[3]) else { fail("X and Y are numbers from 0 to 1") }
+        let text = args.count > 4 ? args[4] : ""
+        let obj: [String: Any] = ["screen": Store.slug(args[1]), "x": x, "y": y, "text": text, "who": who, "at": Date().timeIntervalSince1970]
+        try JSONSerialization.data(withJSONObject: obj).write(to: file)
+        print("cursor on \(Store.slug(args[1]))")
     case "comment":
         let author = option("--as") ?? "Claude"
         let chosen = option("--version").flatMap(Int.init)

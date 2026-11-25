@@ -2,7 +2,7 @@ import AppKit
 import PinCore
 import SwiftUI
 
-@main
+/// Pin as its own app (`Sources/Pin/main.swift`); Wink shows the same canvas in its side panel (`PinPanel`).
 struct PinApp: App {
     @State private var model = Model()
 
@@ -626,4 +626,9 @@ final class PressCheck {
         then(1) { self.say("done"); exit(0) }
         run()
     }
+}
+
+/// The way in from outside the library: the Pin app starts here.
+public enum PinKit {
+    @MainActor public static func runApp() { PinApp.main() }
 }

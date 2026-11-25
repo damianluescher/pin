@@ -11,6 +11,7 @@ struct Canvas: View {
         GeometryReader { box in
             ZStack(alignment: .topLeading) {
                 CanvasEvents(scene: scene)
+                CanvasAgent()
                 CanvasBubble(size: box.size)
             }
             .clipped()
@@ -36,6 +37,43 @@ struct Canvas: View {
             outline = Model.outline(thread.target, on: box.rect)
         }
         return StageScene(app: model.app, page: model.page, boards: model.placed, pins: pins, flows: model.flowLines, outline: outline)
+    }
+}
+
+/// The AI's own cursor on the board it is working on (25 Nov 2026, Damian: "seeing Claude's cursor actively working on each
+/// page, this is exactly what I want"): a green arrow with its name and what it does, gliding to each new spot. The board it
+/// works on glows.
+private struct CanvasAgent: View {
+    @Environment(Model.self) private var model
+    private let green = Color(red: 0.24, green: 0.84, blue: 0.52)
+
+    var body: some View {
+        let _ = model.bubbleTick
+        if let agent = model.agent,
+           let box = model.placed.filter({ $0.screen.id == agent.screen }).max(by: { $0.version.n < $1.version.n }) {
+            let rect = model.onScreen(box.rect)
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 10).stroke(green.opacity(0.9), lineWidth: 2)
+                    .shadow(color: green.opacity(0.6), radius: 10)
+                    .frame(width: rect.width + 8, height: rect.height + 8)
+                    .offset(x: rect.minX - 4, y: rect.minY - 4)
+                VStack(alignment: .leading, spacing: 2) {
+                    Image(systemName: "cursorarrow").resizable().scaledToFit().frame(width: 18, height: 22).foregroundStyle(green)
+                        .shadow(color: .black.opacity(0.7), radius: 2)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(agent.who).font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                        if !agent.text.isEmpty { Text(agent.text).font(.system(size: 11)).foregroundStyle(.black.opacity(0.75)).lineLimit(2) }
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(green))
+                    .frame(maxWidth: 240, alignment: .leading)
+                    .offset(x: 14)
+                }
+                .offset(x: rect.minX + rect.width * agent.x - 3, y: rect.minY + rect.height * agent.y - 2)
+                .animation(.spring(duration: 0.5, bounce: 0.15), value: agent)
+            }
+            .allowsHitTesting(false)
+        }
     }
 }
 

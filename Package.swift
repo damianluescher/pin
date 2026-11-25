@@ -6,11 +6,13 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "Pin", targets: ["Pin"]),
+        .library(name: "PinKit", targets: ["PinKit"]),
         .executable(name: "pincli", targets: ["pincli"]),
     ],
     targets: [
         .target(name: "PinCore"),
-        .executableTarget(name: "Pin", dependencies: ["PinCore"]),
+        .target(name: "PinKit", dependencies: ["PinCore"]),
+        .executableTarget(name: "Pin", dependencies: ["PinKit"]),
         .executableTarget(name: "pincli", dependencies: ["PinCore"]),
         .testTarget(name: "PinCoreTests", dependencies: ["PinCore"]),
     ]
