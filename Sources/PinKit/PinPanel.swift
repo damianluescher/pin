@@ -28,6 +28,11 @@ import SwiftUI
     }
 }
 
+/// The boards fill the panel when it opens (they opened at Pin's own window's zoom, 8 %, "so many issues", 25 Nov).
+@MainActor private func fitSoon(_ model: Model) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { model.fit() }
+}
+
 public struct PinPanel: View {
     let app: String
     let ask: (String) -> Void
@@ -45,8 +50,9 @@ public struct PinPanel: View {
             .onAppear {
                 PinHost.shared.start()
                 if model.app != app { model.open(app) }
+                fitSoon(model)
             }
-            .onChange(of: app) { model.open(app) }
+            .onChange(of: app) { model.open(app); fitSoon(model) }
     }
 }
 
@@ -99,8 +105,10 @@ private struct PanelBody: View {
                 Text(model.page ?? "All boards").lineLimit(1)
             }
             .menuStyle(.borderlessButton).fixedSize()
+            .accessibilityLabel("Page, \(model.page ?? "All boards")")
             Spacer()
-            ZoomMenu().menuStyle(.borderlessButton).fixedSize()
+            ZoomMenu().menuStyle(.borderlessButton).fixedSize().accessibilityLabel("Zoom, \(model.percent) %")
+            icon("arrow.up.left.and.arrow.down.right.square", "Fit the boards to the panel") { model.fit() }
             icon("arrow.clockwise", "Refresh all boards") { model.reload(); LiveBoards.refreshWebBoards(); LiveBoards.refreshSwiftBoards() }
             icon(model.run.isOpen ? "stop.fill" : "play.fill", "Run the real app or website beside the boards") {
                 model.run.toggle(app: app, store: model.store)
@@ -120,12 +128,14 @@ private struct PanelBody: View {
                 HStack(spacing: 8) {
                     TextField(target.map { "Describe a change to \($0)" } ?? "Describe a change", text: $words)
                         .textFieldStyle(.plain).focused($typing)
+                        .accessibilityLabel("Describe a change")
                         .onSubmit(send)
                     Button(action: send) {
                         Image(systemName: "arrow.up").font(.body.weight(.semibold)).foregroundStyle(.black)
                             .frame(width: 26, height: 26).background(Circle().fill(Color.white))
                     }
                     .buttonStyle(.plain).disabled(words.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .accessibilityLabel("Send to the chat")
                 }
                 .padding(.horizontal, 14).frame(width: 440, height: 48)
                 .background(RoundedRectangle(cornerRadius: 16).fill(Color(white: 0.11)))
@@ -168,8 +178,9 @@ private struct PanelBody: View {
             Image(systemName: symbol).frame(width: 32, height: 32)
                 .foregroundStyle(model.tool == which ? Color.black : Color.primary)
                 .background(RoundedRectangle(cornerRadius: 9).fill(model.tool == which ? Color(red: 0.24, green: 0.84, blue: 0.52) : .clear))
+                .contentShape(RoundedRectangle(cornerRadius: 9))
         }
-        .buttonStyle(.plain).help(help)
+        .buttonStyle(.plain).help(help).accessibilityLabel(help)
     }
 
     private func icon(_ symbol: String, _ help: String, on: Bool = false, action: @escaping () -> Void) -> some View {
@@ -177,7 +188,8 @@ private struct PanelBody: View {
             Image(systemName: symbol).frame(width: 28, height: 28)
                 .foregroundStyle(on ? Color.primary : Color.secondary)
                 .background(RoundedRectangle(cornerRadius: 7).fill(on ? Color.white.opacity(0.1) : .clear))
+                .contentShape(RoundedRectangle(cornerRadius: 7))
         }
-        .buttonStyle(.plain).help(help)
+        .buttonStyle(.plain).help(help).accessibilityLabel(help)
     }
 }
