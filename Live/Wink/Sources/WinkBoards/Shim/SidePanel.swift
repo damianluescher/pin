@@ -50,33 +50,35 @@ private struct SPCursor: View {
 private struct SPPanel: View {
     var body: some View {
         VStack(spacing: 0) {
-            // Head: what is open, and the panel's own buttons (New, wide, close).
-            HStack(spacing: 8) {
-                Image(systemName: "square.on.square").foregroundStyle(spGreen)
-                Text("Wink · Live boards").font(.wink(.label))
-                Image(systemName: "chevron.down").font(.wink(.small)).foregroundStyle(.secondary)
+            // Head, as Claude's: the open tabs, + for a new one; Expand and Side panel at the right.
+            HStack(spacing: 4) {
+                tab("square.on.square", "Wink", on: true)
+                tab("globe", "Gmail · ego lite", on: false)
+                Image(systemName: "plus").font(.wink(.label)).foregroundStyle(.primary)
+                    .frame(width: 28, height: 28).background(Theme.chosen, in: RoundedRectangle(cornerRadius: 8))
                 Spacer()
-                ForEach(["plus", "arrow.up.left.and.arrow.down.right", "sidebar.right"], id: \.self) { icon in
-                    Image(systemName: icon).font(.wink(.label)).foregroundStyle(.secondary).frame(width: 32, height: 32)
+                ForEach(["arrow.up.left.and.arrow.down.right", "sidebar.right"], id: \.self) { icon in
+                    Image(systemName: icon).font(.wink(.label)).foregroundStyle(.secondary).frame(width: 28, height: 28)
                 }
             }
-            .padding(.horizontal, 16).frame(height: 52)
-            // Second line: page, grid or one screen, run, share.
+            .padding(.horizontal, 12).frame(height: 48)
+            // The item's own line: name, page, Canvas or Run, properties.
             HStack(spacing: 8) {
-                Text("Chat").font(.wink(.label))
+                Text("Wink").font(.wink(.label))
+                Image(systemName: "chevron.down").font(.wink(.small)).foregroundStyle(.secondary)
+                Text("Page: Chat").font(.wink(.label)).foregroundStyle(.secondary).padding(.leading, 8)
                 Image(systemName: "chevron.down").font(.wink(.small)).foregroundStyle(.secondary)
                 HStack(spacing: 2) {
-                    Image(systemName: "square.grid.2x2").frame(width: 28, height: 24).background(Theme.chosen, in: RoundedRectangle(cornerRadius: 6))
-                    Image(systemName: "square").frame(width: 28, height: 24)
+                    Text("Canvas").padding(.horizontal, 8).frame(height: 24).background(Theme.chosen, in: RoundedRectangle(cornerRadius: 6))
+                    Text("Run").padding(.horizontal, 8).frame(height: 24)
                 }
-                .font(.wink(.small)).foregroundStyle(.secondary)
+                .font(.wink(.small)).padding(.leading, 8)
                 Spacer()
-                Image(systemName: "play").foregroundStyle(.secondary)
-                Text("Run").font(.wink(.label)).foregroundStyle(.secondary)
+                Image(systemName: "slider.horizontal.3").foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16).frame(height: 40)
             Rectangle().fill(Theme.line).frame(height: 1)
-            // The canvas: the app's real screens; Buddy works on the middle one.
+            // The canvas: real screens side by side; the one Buddy builds now is still empty, with its cursor on it.
             ZStack(alignment: .topLeading) {
                 Canvas { context, size in
                     for x in stride(from: 0, through: size.width, by: 24) {
@@ -87,40 +89,49 @@ private struct SPPanel: View {
                 }
                 HStack(alignment: .top, spacing: 24) {
                     SPScreen(name: "Chat", board: "mac-chat")
-                    SPScreen(name: "Tasks", board: "window-tasks", lit: true)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack { Text("Tasks").font(.wink(.small)).foregroundStyle(.secondary); Spacer() }
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color(white: 0.12))
+                            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(spGreen, lineWidth: 2))
+                            .frame(width: 300, height: 192)
+                    }
+                    .frame(width: 300)
                 }
-                .padding(.leading, 32).padding(.top, 120)
-                SPScreen(name: "Review", board: "window-review").padding(.leading, 32).padding(.top, 360)
-                // Buddy's cursor on the Tasks screen, with what it is doing.
-                SPCursor().padding(.leading, 470).padding(.top, 230)
-                Text("Moving the date chip next to the title").font(.wink(.small)).foregroundStyle(.secondary)
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .background(Theme.raised, in: Capsule())
-                    .padding(.leading, 356).padding(.top, 330)
+                .padding(.leading, 32).padding(.top, 300)
+                SPScreen(name: "Review", board: "window-review").padding(.leading, 32).padding(.top, 540)
+                SPCursor().padding(.leading, 420).padding(.top, 380)
                 // His comment on the Chat screen.
                 ZStack {
                     Circle().fill(Color.white).frame(width: 24, height: 24)
                     Text("D").font(.wink(.small).weight(.semibold)).foregroundStyle(.black)
                 }
-                .padding(.leading, 200).padding(.top, 210)
-                // The New menu, open under +.
+                .padding(.leading, 200).padding(.top, 390)
+                // The + menu, open: Wink's kinds.
                 VStack(alignment: .leading, spacing: 2) {
                     Text("New").font(.wink(.small)).foregroundStyle(.secondary).padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 4)
                     menuRow("square.on.square", "Live boards", "your apps' real screens", .init(red: 0.24, green: 0.84, blue: 0.52))
-                    menuRow("macwindow", "Computer", "watch Buddy use your Mac", .init(red: 0.55, green: 0.62, blue: 1))
                     menuRow("globe", "Browser", "a page in ego lite", .init(red: 0.6, green: 0.6, blue: 0.6))
+                    menuRow("macwindow", "Computer", "watch Buddy use your Mac", .init(red: 0.55, green: 0.62, blue: 1))
                     menuRow("doc.text", "File", "a doc, picture or video", .init(red: 0.95, green: 0.7, blue: 0.3))
                 }
                 .padding(.bottom, 8)
                 .frame(width: 260)
                 .background(Theme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.border, lineWidth: 1))
-                .padding(.leading, 524).padding(.top, 4)
-                // Tools at the foot: select, hand, comment, text, frame; Ask Buddy; zoom.
-                VStack {
+                .padding(.leading, 230).padding(.top, 4)
+                // Bottom: the tools, Ask Buddy open as a box over them, zoom.
+                VStack(spacing: 8) {
                     Spacer()
+                    HStack {
+                        Text("Describe a change to Tasks").font(.wink(.body)).foregroundStyle(.secondary)
+                        Spacer()
+                        Image(systemName: "arrow.up").font(.wink(.label)).foregroundStyle(.black).frame(width: 28, height: 28).background(Color.white, in: Circle())
+                    }
+                    .padding(.horizontal, 16).frame(width: 460, height: 52)
+                    .background(Theme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.border, lineWidth: 1))
                     HStack(spacing: 4) {
-                        ForEach(Array(["cursorarrow", "hand.raised", "bubble.left", "textformat", "number"].enumerated()), id: \.offset) { index, icon in
+                        ForEach(Array(["cursorarrow", "hand.raised", "bubble.left"].enumerated()), id: \.offset) { index, icon in
                             Image(systemName: icon).font(.wink(.label))
                                 .foregroundStyle(index == 0 ? Color.black : Color.primary)
                                 .frame(width: 36, height: 36)
@@ -128,19 +139,29 @@ private struct SPPanel: View {
                         }
                         Text("Ask Buddy").font(.wink(.label)).padding(.horizontal, 12).frame(height: 36)
                             .background(Theme.chosen, in: RoundedRectangle(cornerRadius: 10))
-                        Text("37 %").font(.wink(.small)).foregroundStyle(.secondary).padding(.horizontal, 8)
+                        Text("43 %").font(.wink(.small)).foregroundStyle(.secondary).padding(.horizontal, 8)
                     }
                     .padding(6)
                     .background(Theme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.border, lineWidth: 1))
-                    .frame(maxWidth: .infinity)
                     .padding(.bottom, 20)
                 }
+                .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(white: 0.035))
         }
         .background(Theme.tile)
+    }
+
+    private func tab(_ icon: String, _ name: String, on: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon).font(.wink(.small)).foregroundStyle(on ? spGreen : .secondary)
+            Text(name).font(.wink(.label)).foregroundStyle(on ? Color.primary : .secondary)
+            if on { Image(systemName: "xmark").font(.wink(.small)).foregroundStyle(.secondary) }
+        }
+        .padding(.horizontal, 12).frame(height: 32)
+        .background(on ? Theme.chosen : .clear, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func menuRow(_ icon: String, _ name: String, _ note: String, _ tint: Color) -> some View {
@@ -173,7 +194,7 @@ private struct SPChat: View {
                     .frame(width: 36, height: 36).background(Theme.chosen, in: RoundedRectangle(cornerRadius: 10))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Wink · Live boards").font(.wink(.label))
-                    Text("Open beside the chat · Buddy is working on Tasks").font(.wink(.small)).foregroundStyle(.secondary)
+                    Text("Open beside the chat · Buddy is building Tasks").font(.wink(.small)).foregroundStyle(.secondary)
                 }
                 Spacer()
             }
