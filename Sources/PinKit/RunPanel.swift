@@ -117,8 +117,8 @@ struct RunPanel: View {
                 title
                 Spacer(minLength: 0)
                 controls
-                Button { choose() } label: { Image(systemName: "folder") }.help("Choose the folder to run")
-                Button { run.close() } label: { Image(systemName: "xmark") }.help("Close")
+                Button { choose() } label: { RunIcon("folder") }.help("Choose the folder to run")
+                Button { run.close() } label: { RunIcon("xmark") }.help("Close")
             }
             .buttonStyle(.borderless)
             .font(Style.body)
@@ -161,8 +161,8 @@ struct RunPanel: View {
     @ViewBuilder private var controls: some View {
         switch run.running {
         case .phone(let phone):
-            Button { phone.runAgain() } label: { Image(systemName: "arrow.clockwise") }.help("Build and run again")
-            Button { phone.home() } label: { Image(systemName: "house") }.help("Home")
+            Button { phone.runAgain() } label: { RunIcon("arrow.clockwise") }.help("Build and run again")
+            Button { phone.home() } label: { RunIcon("house") }.help("Home")
         case .web(let web):
             Menu {
                 ForEach(WebSize.allCases, id: \.self) { size in
@@ -170,11 +170,11 @@ struct RunPanel: View {
                         Label(size.width.map { "\(size.rawValue) · \(Int($0))" } ?? size.rawValue, systemImage: size == web.size ? "checkmark" : size.icon)
                     }
                 }
-            } label: { Image(systemName: web.size.icon) }
+            } label: { RunIcon(web.size.icon) }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Size")
-            Button { web.back() } label: { Image(systemName: "chevron.left") }.help("Back")
-            Button { web.reload() } label: { Image(systemName: "arrow.clockwise") }.help("Reload")
-            Button { web.openInBrowser() } label: { Image(systemName: "safari") }.help("Open in Chrome")
+            Button { web.back() } label: { RunIcon("chevron.left") }.help("Back")
+            Button { web.reload() } label: { RunIcon("arrow.clockwise") }.help("Reload")
+            Button { web.openInBrowser() } label: { RunIcon("safari") }.help("Open in ego lite")
         case nil:
             EmptyView()
         }
@@ -301,5 +301,14 @@ struct RunEdge: View {
                     }
                     .onEnded { _ in from = nil })
             }
+    }
+}
+
+/// A Run panel button: the icon in a full 28-point square you can hit, not just its glyph (tested 25 Nov 2026).
+struct RunIcon: View {
+    let symbol: String
+    init(_ symbol: String) { self.symbol = symbol }
+    var body: some View {
+        Image(systemName: symbol).frame(width: 28, height: 28).contentShape(Rectangle())
     }
 }

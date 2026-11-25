@@ -124,9 +124,10 @@ final class WebPreview {
     func back() { web.goBack() }
     func openInBrowser() {
         guard let url = web.url ?? address else { return }
-        let chrome = URL(fileURLWithPath: "/Applications/Google Chrome.app")
-        if FileManager.default.fileExists(atPath: chrome.path) {
-            NSWorkspace.shared.open([url], withApplicationAt: chrome, configuration: NSWorkspace.OpenConfiguration())
+        // ego lite is Damian's browser since 12 Nov 2026 (not Chrome any more).
+        let ego = URL(fileURLWithPath: "/Applications/ego lite.app")
+        if FileManager.default.fileExists(atPath: ego.path) {
+            NSWorkspace.shared.open([url], withApplicationAt: ego, configuration: NSWorkspace.OpenConfiguration())
         } else {
             NSWorkspace.shared.open(url)
         }
