@@ -160,7 +160,7 @@ struct Pick: Equatable {
             return
         }
         if let problem = found.failure { failure = problem; return }
-        if found.screens != screens { screens = found.screens }
+        if found.screens != screens { screens = found.screens; retryFocus() }
         if found.threads != threads { threads = found.threads }
         let flowsChanged = found.flows != flows
         if flowsChanged { flows = found.flows }
@@ -174,6 +174,8 @@ struct Pick: Equatable {
     }
 
     func open(_ name: String) {
+        stopCamera()
+        synthetic = nil
         app = name
         UserDefaults.standard.set(name, forKey: "lastFile")
         page = nil
@@ -184,6 +186,7 @@ struct Pick: Equatable {
     }
 
     func choose(page name: String) {
+        stopCamera()
         page = name
         selected = nil
         draft = nil
@@ -324,6 +327,7 @@ struct Pick: Equatable {
     /// Starts moving the board under the point, if any. Only with the cursor tool: the comment tool clicks on boards.
     func beginMove(at point: CGPoint) -> Bool {
         guard tool == .move, let box = placed.last(where: { onScreen($0.rect).contains(point) }) else { return false }
+        stopCamera()
         dragging = box.screen.id
         keepFitted = false
         return true
@@ -377,6 +381,7 @@ struct Pick: Equatable {
     }
 
     func zoom(by factor: CGFloat, at point: CGPoint? = nil) {
+        stopCamera()
         keepFitted = false
         let anchor = point ?? CGPoint(x: viewport.width / 2, y: viewport.height / 2)
         let next = min(max(scale * factor, 0.05), 16)
@@ -389,17 +394,124 @@ struct Pick: Equatable {
     struct AgentSpot: Equatable { var screen: String; var x: Double; var y: Double; var text: String; var who: String }
     var agent: AgentSpot?
 
+    /// The spot Wink shows when an AI changes a board without `pin cursor` (`PinHost.focus`): the same glow and arrow, for
+    /// 20 s. A real cursor.json that is fresh always wins.
+    @ObservationIgnored private var synthetic: (app: String, spot: AgentSpot, until: Date)?
+
+    func show(spot: AgentSpot) {
+        guard let app else { return }
+        synthetic = (app, spot, Date().addingTimeInterval(20))
+        readCursor()
+    }
+
     private func readCursor() {
         guard let app else { if agent != nil { agent = nil }; return }
         let file = store.home.appendingPathComponent(app).appendingPathComponent("cursor.json")
         guard let data = try? Data(contentsOf: file), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let at = obj["at"] as? Double, Date().timeIntervalSince1970 - at < 20, let screen = obj["screen"] as? String else {
-            if agent != nil { agent = nil }
+            if let synthetic, synthetic.app == app, synthetic.until > Date() {
+                if agent != synthetic.spot { agent = synthetic.spot }
+            } else if agent != nil {
+                agent = nil
+            }
             return
         }
         let next = AgentSpot(screen: screen, x: obj["x"] as? Double ?? 0.5, y: obj["y"] as? Double ?? 0.5,
                              text: obj["text"] as? String ?? "", who: obj["who"] as? String ?? "Buddy")
-        if next != agent { agent = next }
+        guard next != agent else { return }
+        // Only a move follows: new words at the same spot leave the camera where he put it.
+        let moved = agent.map { ($0.screen, $0.x, $0.y) != (next.screen, next.x, next.y) } ?? true
+        agent = next
+        if moved, PinHost.shared.followCamera { focus(screen: next.screen, at: CGPoint(x: next.x, y: next.y), animated: true) }
+    }
+
+    // MARK: Following the AI
+
+    @ObservationIgnored private var cameraMove: Timer?
+    /// The board the camera was last sent to, and until when it is tried again: the panel may still be opening (no size
+    /// yet) or the board may be seconds old and not read yet.
+    @ObservationIgnored private var pendingFocus: (id: String, point: CGPoint?, until: Date)?
+    /// When a board was last focused, so the panel's own fit does not undo it.
+    @ObservationIgnored private(set) var focusedAt = Date.distantPast
+
+    /// Ends a camera move and any focus still waiting. Every move he makes himself calls it, so his hand always wins.
+    func stopCamera() {
+        cameraMove?.invalidate()
+        cameraMove = nil
+        pendingFocus = nil
+    }
+
+    /// The board by its id, its slug, or its id or name in any case.
+    func screen(named id: String) -> Screen? {
+        let slug = Store.slug(id), low = id.lowercased()
+        return screens.first { $0.id == id } ?? screens.first { $0.id == slug }
+            ?? screens.first { $0.id.lowercased() == low || $0.name.lowercased() == low }
+    }
+
+    /// Glides the camera to a place: ease in and out, 120 times a second. The middle of the view travels in a straight
+    /// line while the zoom changes evenly, so the way there reads as one move.
+    func animateCamera(toScale goal: CGFloat, origin goalOrigin: CGPoint, duration: Double = 0.55) {
+        cameraMove?.invalidate()
+        cameraMove = nil
+        let fromScale = scale, mid = CGPoint(x: viewport.width / 2, y: viewport.height / 2)
+        let from = CGPoint(x: (mid.x - origin.x) / fromScale, y: (mid.y - origin.y) / fromScale)
+        let to = CGPoint(x: (mid.x - goalOrigin.x) / goal, y: (mid.y - goalOrigin.y) / goal)
+        let near = abs(goal / fromScale - 1) < 0.002 && hypot(goalOrigin.x - origin.x, goalOrigin.y - origin.y) < 1
+        guard duration > 0, !near, fromScale > 0, goal > 0 else { return look(scale: goal, origin: goalOrigin) }
+        let began = CACurrentMediaTime()
+        let timer = Timer(timeInterval: 1.0 / 120, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self, self.cameraMove === timer else { return timer.invalidate() }
+                let t = min((CACurrentMediaTime() - began) / duration, 1)
+                let e = CGFloat(t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2)
+                let zoom = fromScale * pow(goal / fromScale, e)
+                let point = CGPoint(x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e)
+                self.look(scale: zoom, origin: CGPoint(x: mid.x - point.x * zoom, y: mid.y - point.y * zoom))
+                if t >= 1 {
+                    timer.invalidate()
+                    self.cameraMove = nil
+                    self.look(scale: goal, origin: goalOrigin)
+                    self.showPercent(now: true)
+                }
+            }
+        }
+        cameraMove = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    /// Brings one board into view where an AI works on it: its page, the whole board with 72 around it and never larger
+    /// than 125 %. A board far taller than the view is shown at a size he can read, around `point` (shares of the board).
+    func focus(screen id: String, at point: CGPoint? = nil, animated: Bool = true) {
+        let until = pendingFocus.flatMap { $0.id == id && $0.until > Date() ? $0.until : nil } ?? Date().addingTimeInterval(4)
+        stopCamera()
+        glide?.invalidate()
+        glide = nil
+        pendingFocus = (id, point, until)
+        focusedAt = Date()
+        keepFitted = false
+        guard let screen = screen(named: id) else { return }
+        if screen.pageName != page { page = screen.pageName; selected = nil; draft = nil }
+        guard viewport.width > 100, viewport.height > 100,
+              let box = placed.last(where: { $0.screen.id == screen.id })?.rect, box.width > 0, box.height > 0 else { return }
+        let room: CGFloat = 72
+        let wide = min((viewport.width - 2 * room) / box.width, 1.25)
+        var zoom = max(min(wide, (viewport.height - 2 * room) / box.height), 0.05)
+        var middle = box.midY
+        if let point, zoom < wide * 0.5 {
+            // Very tall: half the width's zoom at least, with the spot in the middle and no empty room past its ends.
+            zoom = max(wide * 0.5, 0.05)
+            let half = (viewport.height / 2 - room) / zoom
+            middle = min(max(box.minY + box.height * point.y, box.minY + half), box.maxY - half)
+        }
+        let goal = CGPoint(x: viewport.width / 2 - box.midX * zoom, y: viewport.height / 2 - middle * zoom)
+        if animated { animateCamera(toScale: zoom, origin: goal) } else { look(scale: zoom, origin: goal) }
+    }
+
+    /// The focus again once the view has its size or the board has been read.
+    private func retryFocus() {
+        guard let pending = pendingFocus else { return }
+        guard pending.until > Date() else { pendingFocus = nil; return }
+        focus(screen: pending.id, at: pending.point, animated: true)
     }
 
     /// The one way the camera changes.
@@ -421,6 +533,7 @@ struct Pick: Equatable {
 
     /// A wheel notch: heads for the new zoom over a few frames instead of snapping there. More notches just move the goal.
     func glideZoom(by factor: CGFloat, at point: CGPoint) {
+        stopCamera()
         glideGoal = min(max((glide == nil ? scale : glideGoal) * factor, 0.05), 16)
         glideAnchor = point
         guard glide == nil else { return }
@@ -443,16 +556,18 @@ struct Pick: Equatable {
     func actualSize() { zoom(by: 1 / scale) }
 
     func pan(_ x: CGFloat, _ y: CGFloat) {
+        stopCamera()
         keepFitted = false
         look(scale: scale, origin: CGPoint(x: origin.x + x, y: origin.y + y))
     }
 
     func sized(_ size: CGSize) {
         viewport = size
-        if keepFitted { fit() }
+        if keepFitted { fit() } else { retryFocus() }
     }
 
     func fit() {
+        stopCamera()
         keepFitted = true
         guard viewport.width > 100, viewport.height > 100 else { return }
         let boxes = placed.map(\.rect)
@@ -479,6 +594,7 @@ struct Pick: Equatable {
     }
 
     func reveal(_ screen: Screen) {
+        stopCamera()
         keepFitted = false
         guard let box = placed.last(where: { $0.screen.id == screen.id }) else { return }
         let next = min((viewport.width - 120) / box.rect.width, (viewport.height - 120) / box.rect.height, 1)

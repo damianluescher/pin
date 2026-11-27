@@ -21,6 +21,33 @@ import SwiftUI
         model.start()
     }
 
+    /// Whether the canvas goes to the board an AI works on. Wink sets it per chat (its Follow button).
+    public var followCamera = true
+    private var lastFocus: String?
+
+    /// Pin's own name for an app, however it was written: "LUTCam", "lut cam" and "LUT Cam" are one file.
+    public func name(of app: String) -> String? {
+        start()
+        let apps = model.store.apps()
+        func plain(_ text: String) -> String { text.lowercased().filter { $0.isLetter || $0.isNumber } }
+        return apps.first { $0 == app } ?? apps.first { plain($0) == plain(app) }
+    }
+
+    /// An AI works on this board now: opens the app, glides to the board (while following is on) and shows the green
+    /// cursor there, unless `pin cursor` already says where it is. Called again with the same place, it only keeps the
+    /// cursor alive and leaves the camera where he put it.
+    public func focus(app: String, screen: String?, x: Double? = nil, y: Double? = nil, text: String? = nil) {
+        guard let name = name(of: app) else { return }
+        if model.app != name { model.open(name); lastFocus = nil }
+        guard let screen, !screen.isEmpty else { return }
+        let id = model.screen(named: screen)?.id ?? Store.slug(screen)
+        model.show(spot: .init(screen: id, x: x ?? 0.5, y: y ?? 0.5, text: text ?? "", who: "Buddy"))
+        let key = "\(name)/\(id)/\(x ?? -1)/\(y ?? -1)"
+        guard followCamera, key != lastFocus else { return }
+        lastFocus = key
+        model.focus(screen: id, at: y.map { CGPoint(x: x ?? 0.5, y: $0) }, animated: true)
+    }
+
     /// Every app and project in Pin's store, for Wink's New menu.
     public func apps() -> [String] {
         start()
@@ -30,7 +57,8 @@ import SwiftUI
 
 /// The boards fill the panel when it opens (they opened at Pin's own window's zoom, 8 %, "so many issues", 25 Nov).
 @MainActor private func fitSoon(_ model: Model) {
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { model.fit() }
+    // Not over a board an AI was just sent to: the fit would throw the camera back out.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { if Date().timeIntervalSince(model.focusedAt) > 3 { model.fit() } }
 }
 
 public struct PinPanel: View {
@@ -52,7 +80,7 @@ public struct PinPanel: View {
                 if model.app != app { model.open(app) }
                 fitSoon(model)
             }
-            .onChange(of: app) { model.open(app); fitSoon(model) }
+            .onChange(of: app) { if model.app != app { model.open(app) }; fitSoon(model) }
     }
 }
 
