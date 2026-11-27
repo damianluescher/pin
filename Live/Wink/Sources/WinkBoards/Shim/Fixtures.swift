@@ -115,6 +115,16 @@ enum Fixtures {
                     Step(text: "Export for Instagram", state: "pending", glyph: "◻")])]),
             detail("working", "Launch film", state: "working", live: live(21, tokens: 1800), [you("u", "Export the reel for Instagram"),
                 step("s", "Bash(ffmpeg -i reel.mov -vf scale=1080:1920 reel-ig.mp4)", result: "frame= 412 fps=96 time=00:00:13.7", status: "running")]),
+            // The three side panel boards that show what the AI does right now (Shim/SidePanel.swift): plain words, no tool lines.
+            detail("live-app", "Wedding LONG_3 v5", state: "working", live: live(14, tokens: 1400), [
+                you("u", "Open the wedding project in DaVinci and apply the 46 review notes"),
+                says("a", "On it — opening Wedding LONG_3 v5 in DaVinci Resolve and matching your 46 notes.")]),
+            detail("live-render", "Wedding LONG_3 v5", state: "working", live: live(121, tokens: 2600), [
+                you("u", "Render v5 in 4K ProRes so I can review it"),
+                says("a", "Rendering Wedding LONG_3 v5 in 4K ProRes now.")]),
+            detail("live-image", "Hero portrait retouch", [
+                you("u", "Upscale and retouch the hero portrait in Photoshop"), turn("t", 23),
+                says("a", "Done — saved hero-portrait-v3.png and ready for your look.")]),
             detail("queue", "Launch film", state: "working", live: live(48, tokens: 3400), [you("u", "Cut the intro to 20 seconds and keep the drone shot"),
                 step("s1", "Read(Launch_v2.drp)"), step("s2", "Bash(resolve-cli trim intro 00:20)"),
                 you("u2", "Also make the music fade out at the end", status: "delivered"), step("s3", "Bash(./build.sh check)", status: "running")]),

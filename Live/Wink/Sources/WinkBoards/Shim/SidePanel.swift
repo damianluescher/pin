@@ -14,8 +14,11 @@ import SwiftUI
 // Three more designs, the panel showing what the AI does right now (27 Nov 2026, wink2 docs/visible-work.md, Damian: "use
 // the app icon, real progress, thumbnails - not just empty text"): "new-side-panel-live-app" (an app in use),
 // "new-side-panel-live-render" (a long render running), "new-side-panel-live-image" (a picture coming back). Plain words
-// only, no tool names. Design only until he says yes: `StepTimeline`, the progress bar and the app tile are not in
-// wink2's DESIGN.md or App/Design.swift yet and go there first when he approves.
+// only, no tool names, and their own chats in Fixtures ("live-app", "live-render", "live-image") say the same in plain
+// words. Clean as T3 Code: no rims on cards or pictures, no line under the head, a lower head (52 instead of 64, only on
+// these three so the real panel's boards keep the real measures). The pictures are real: a frame of the wedding film
+// and a portrait. Design only until he says yes: `StepTimeline`, the progress bar and the app tile are not in wink2's
+// DESIGN.md or App/Design.swift yet and go there first when he approves.
 
 /// Stands in for wink2's WinkPanel inside a board.
 struct WinkPanel: View {
@@ -67,6 +70,8 @@ private struct SPScreen: View {
 /// goes by itself to what the chat's AI does), Expand and hide at the right.
 private struct SPHead: View {
     let tabs: [(icon: String, name: String)]
+    /// The lower head of the live designs: 12 above and 52 high instead of the real head's 20 and 64.
+    var low = false
     var body: some View {
         HStack(spacing: 4) {
             ForEach(Array(tabs.enumerated()), id: \.offset) { index, tab in
@@ -94,8 +99,8 @@ private struct SPHead: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.top, 20)
-        .frame(height: 64)
+        .padding(.top, low ? 12 : 20)
+        .frame(height: low ? 52 : 64)
     }
 }
 
@@ -179,17 +184,20 @@ private struct AppIcon: View {
     }
 }
 
-/// A 16:9 picture from the fixtures with the row's corners.
+/// A picture from the fixtures with the row's corners, cut to `ratio` (width by height) from its middle, never stretched.
 private struct LiveStill: View {
+    let name: String
+    let ratio: CGFloat
     var body: some View {
-        Group {
-            if let picture = NSImage(contentsOfFile: Fixtures.file("still.jpg")) {
-                Image(nsImage: picture).resizable().interpolation(.high).aspectRatio(16 / 9, contentMode: .fit)
-            } else {
-                Rectangle().fill(Theme.chosen).aspectRatio(16 / 9, contentMode: .fit)
+        Color.clear.aspectRatio(ratio, contentMode: .fit)
+            .overlay {
+                if let picture = NSImage(contentsOfFile: Fixtures.file(name)) {
+                    Image(nsImage: picture).resizable().interpolation(.high).scaledToFill()
+                } else {
+                    Theme.chosen
+                }
             }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous))
     }
 }
 
@@ -235,7 +243,6 @@ private struct StepTimeline: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous).stroke(Theme.border, lineWidth: 1))
     }
 }
 
@@ -246,8 +253,7 @@ private struct LivePanel<Stage: View>: View {
     @ViewBuilder var stage: Stage
     var body: some View {
         VStack(spacing: 0) {
-            SPHead(tabs: [tab])
-            Rectangle().fill(Theme.line).frame(height: 1)
+            SPHead(tabs: [tab], low: true)
             VStack(spacing: 24) {
                 stage.frame(maxWidth: .infinity, maxHeight: .infinity)
                 StepTimeline(steps: steps).fixedSize(horizontal: false, vertical: true)
@@ -271,7 +277,7 @@ private struct LiveDot: View {
     }
 }
 
-/// An app in use: its real icon, large, in a calm tile with a green live rim.
+/// An app in use: its real icon, large, in a calm tile.
 private struct SidePanelLiveApp: View {
     var body: some View {
         LivePanel(tab: ("film", "DaVinci Resolve"), steps: [
@@ -283,7 +289,6 @@ private struct SidePanelLiveApp: View {
                 AppIcon(path: LiveApp.resolve, side: 88, fallback: "film")
                     .frame(width: 152, height: 152)
                     .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous).stroke(Theme.accent.opacity(0.5), lineWidth: 1).winkGlow())
                 VStack(spacing: 8) {
                     Text("Opening your wedding project in DaVinci").font(.wink(.title)).multilineTextAlignment(.center)
                     Text("Timeline · Wedding LONG_3 v5").font(.wink(.label)).foregroundStyle(.secondary)
@@ -310,7 +315,7 @@ private struct SidePanelLiveRender: View {
         ]) {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(spacing: 12) {
-                    LiveStill()
+                    LiveStill(name: "wedding-frame.jpg", ratio: 16 / 9)
                     HStack(spacing: 8) {
                         AppIcon(path: LiveApp.resolve, side: 24, fallback: "film")
                         Text("4K · ProRes 422").font(.wink(.small)).foregroundStyle(.secondary)
@@ -321,7 +326,6 @@ private struct SidePanelLiveRender: View {
                 }
                 .padding(12)
                 .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous).stroke(Theme.border, lineWidth: 1))
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Rendering Wedding LONG_3 v5").font(.wink(.heading))
                     Capsule().fill(Theme.chosen).frame(height: 8)
@@ -356,14 +360,12 @@ private struct SidePanelLiveImage: View {
                     Spacer(minLength: 8)
                     LiveDot(word: "Done")
                 }
-                LiveStill()
-                    .padding(8)
-                    .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous).stroke(Theme.border, lineWidth: 1))
-                Text("hero-portrait-v3.png · 3840 × 2160").font(.wink(.small)).foregroundStyle(.secondary).monospacedDigit()
+                LiveStill(name: "portrait-retouch.jpg", ratio: 3 / 4)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Text("hero-portrait-v3.png · 2388 × 3200").font(.wink(.small)).foregroundStyle(.secondary).monospacedDigit()
                 HStack(spacing: 8) {
-                    Button("Review") {}.buttonStyle(Pill(filled: true))
-                    Button("Open in Finder") {}.buttonStyle(Pill(filled: false))
+                    Button("Open") {}.buttonStyle(Pill(filled: true))
+                    Button("Show in Finder") {}.buttonStyle(Pill(filled: false))
                 }
             }
         }
