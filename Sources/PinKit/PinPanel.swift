@@ -36,16 +36,27 @@ import SwiftUI
     /// An AI works on this board now: opens the app, glides to the board (while following is on) and shows the green
     /// cursor there, unless `pin cursor` already says where it is. Called again with the same place, it only keeps the
     /// cursor alive and leaves the camera where he put it.
-    public func focus(app: String, screen: String?, x: Double? = nil, y: Double? = nil, text: String? = nil) {
+    public func focus(app: String, screen: String?, x: Double? = nil, y: Double? = nil, text: String? = nil, who: String? = nil) {
         guard let name = name(of: app) else { return }
         if model.app != name { model.open(name); lastFocus = nil }
-        guard let screen, !screen.isEmpty else { return }
+        // Work on the app's boards that names no board (its source files, its build): the board changed last is the one
+        // being worked on, so the cursor shows there (Damian, 27 Nov 2026: "i dont see his cursor on what page he is working on").
+        guard let screen = (screen?.isEmpty == false ? screen : nil) ?? newestScreen(of: name) else { return }
         let id = model.screen(named: screen)?.id ?? Store.slug(screen)
-        model.show(spot: .init(screen: id, x: x ?? 0.5, y: y ?? 0.5, text: text ?? "", who: "Buddy"))
+        model.show(spot: .init(screen: id, x: x ?? 0.5, y: y ?? 0.5, text: text ?? "", who: who ?? "Buddy"))
         let key = "\(name)/\(id)/\(x ?? -1)/\(y ?? -1)"
         guard followCamera, key != lastFocus else { return }
         lastFocus = key
         model.focus(screen: id, at: y.map { CGPoint(x: x ?? 0.5, y: $0) }, animated: true)
+    }
+
+    /// The board of an app whose folder changed last.
+    private func newestScreen(of app: String) -> String? {
+        let folder = model.store.home.appendingPathComponent(app)
+        let boards = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        func date(_ url: URL) -> Date { (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast }
+        return boards.filter { !$0.lastPathComponent.hasPrefix("_") && !$0.lastPathComponent.hasPrefix(".") && !$0.lastPathComponent.contains(".") }
+            .max { date($0) < date($1) }?.lastPathComponent
     }
 
     /// Every app and project in Pin's store, for Wink's New menu.
