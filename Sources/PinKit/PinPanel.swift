@@ -196,7 +196,7 @@ private struct PanelBody: View {
         let text = words.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
         let about = target.map { "the \($0) board" } ?? "the boards"
-        ask("\(text)\n\n(Asked from the side panel, about \(about) of \(app) in Pin.)")
+        ask("\(text)\n\n(Asked from the side panel, about \(about) of \(app) in Boards.)")
         words = ""
         asking = false
     }

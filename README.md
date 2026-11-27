@@ -1,6 +1,8 @@
-# Pin
+# Boards (was Pin)
 
-A Mac app for designing and reviewing apps on a canvas. Boards are not pictures: each one runs the app's real code (SwiftUI views or a web page), so what you see is what ships. You pin comments on a board, an AI agent changes the code, and the board refreshes by itself.
+Boards live only inside Wink's side panel now (27 Nov 2026); this repo is the library behind them (PinKit, PinCore), the `boards` command (old name `pin`) and the board libraries in `Live/`. There is no separate app any more.
+
+Designing and reviewing apps on a canvas. Boards are not pictures: each one runs the app's real code (SwiftUI views or a web page), so what you see is what ships. You pin comments on a board, an AI agent changes the code, and the board refreshes by itself.
 
 ## What it does
 
@@ -11,11 +13,11 @@ A Mac app for designing and reviewing apps on a canvas. Boards are not pictures:
 
 ## Layout
 
-- `Sources/Pin` – the Mac app (SwiftUI)
+- `Sources/Pin` – a bare window around PinKit, only for the `PIN_*` self-check hooks; never installed
 - `Sources/PinCore` – the shared file store
-- `Sources/pincli` – the `pin` command for agents
+- `Sources/pincli` – the `boards` command for agents (`pin` is a hidden alias)
 - `Live/` – board libraries for individual apps (examples)
-- `scripts/install.sh` – build and install `Pin.app`
+- `scripts/install.sh` – build and install the `boards` command
 
 ## Build
 

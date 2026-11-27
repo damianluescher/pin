@@ -1,25 +1,25 @@
 import Foundation
 import PinCore
 
-// The agents' side of Pin. Everything goes through the same files as the app, so the app shows it within two seconds.
+// The `boards` command (old name `pin`, same tool): the agents' side of Boards in Wink. Everything goes through the same files as the app, so the app shows it within two seconds.
 let usage = """
-pin apps
-pin screens APP
-pin comments [APP [SCREEN]] [--all] [--json]     open comments, with where they sit and the picture's path
-pin add APP SCREEN PICTURE [--kind iphone|mac|web] [--page NAME] [--note TEXT] [--source PATH]     next version of a screen
-pin flow APP FROM TO [--label TEXT]     an arrow between two boards
-pin unflow APP FROM TO
-pin flows APP
-pin place APP SCREEN X Y     where a board sits on the canvas
-pin reply ID TEXT [--as NAME]
-pin resolve ID
-pin reopen ID
-pin cursor APP SCREEN X Y [TEXT] [--as NAME] | --clear     the AI's live cursor on a board while it works (X, Y from 0 to 1)
-pin comment APP SCREEN X Y TEXT [--version N] [--as NAME]     X and Y from 0 to 1
-pin capture web APP SCREEN URL [--size 1440x900] [--note TEXT]
-pin general APP TEXT [--as NAME]     a comment on the whole file, on no board
-pin run APP [FOLDER|--clear]     the folder whose iPhone app or website the Run panel starts
-pin capture sim APP SCREEN --bundle ID [--arg A]... [--wait SECONDS] [--note TEXT] [--source PATH]
+boards apps
+boards screens APP
+boards comments [APP [SCREEN]] [--all] [--json]     open comments, with where they sit and the picture's path
+boards add APP SCREEN PICTURE [--kind iphone|mac|web] [--page NAME] [--note TEXT] [--source PATH]     next version of a screen
+boards flow APP FROM TO [--label TEXT]     an arrow between two boards
+boards unflow APP FROM TO
+boards flows APP
+boards place APP SCREEN X Y     where a board sits on the canvas
+boards reply ID TEXT [--as NAME]
+boards resolve ID
+boards reopen ID
+boards cursor APP SCREEN X Y [TEXT] [--as NAME] | --clear     the AI's live cursor on a board while it works (X, Y from 0 to 1)
+boards comment APP SCREEN X Y TEXT [--version N] [--as NAME]     X and Y from 0 to 1
+boards capture web APP SCREEN URL [--size 1440x900] [--note TEXT]
+boards general APP TEXT [--as NAME]     a comment on the whole file, on no board
+boards run APP [FOLDER|--clear]     the folder whose iPhone app or website the Run panel starts
+boards capture sim APP SCREEN --bundle ID [--arg A]... [--wait SECONDS] [--note TEXT] [--source PATH]
 """
 
 var args = Array(CommandLine.arguments.dropFirst())
