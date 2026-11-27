@@ -4,7 +4,7 @@ import SwiftUI
 /// What Pin loads: Wink's real screens, by board name, each with its own model and made-up data. Nothing runs the engine.
 @MainActor
 public enum WinkBoards {
-    private enum Frame { case mac, phone, drawer, playbooks(String), needsYou, advisor, voice, review, loops, smooth, saves, sideMenu(String), sidePanel }
+    private enum Frame { case mac, phone, drawer, playbooks(String), needsYou, advisor, voice, review, loops, smooth, saves, sideMenu(String) }
 
     private struct Spec {
         var frame = Frame.mac
@@ -37,7 +37,11 @@ public enum WinkBoards {
         // New side menu, two options (20 Nov 2026), design only: Shim/SideMenu.swift.
         case "new-side-menu-a-one-quiet-column": return Spec(frame: .sideMenu("a"))
         case "new-side-menu-b-buddy-as-home": return Spec(frame: .sideMenu("b"))
-        case "new-side-panel-pin-inside-wink": return Spec(frame: .sidePanel)
+        // The side panel beside a chat with the side list open, and its empty state as a grid (27 Nov 2026): Shim/SidePanel.swift.
+        case "mac-chat-side-panel-open":
+            return Spec(chat: "penpot", setup: { $0.openTab(.init(kind: .board, target: "Wink")) })
+        case "new-side-panel-empty":
+            return Spec(chat: "penpot", env: ["BOARD_PANEL": "empty"], setup: { $0.openTab(.init(kind: .board, target: "Wink")) })
         // Playbooks (12 Nov 2026), design only: the views are in Shim/Playbooks.swift.
         case let name where name.hasPrefix("new-playbooks-"): return Spec(frame: .playbooks(String(name.dropFirst("new-playbooks-".count))))
         // A chat whose turn ended while its background job still runs (12 Nov 2026: "this looks to me like done").
@@ -187,8 +191,6 @@ public enum WinkBoards {
             Zoomed { SmoothIdeasBoard().winkOverlays() }
         case .sideMenu(let option):
             SideMenuBoard(option: option)
-        case .sidePanel:
-            SidePanelBoard()
         case .voice:
             Zoomed { VoiceModeBoard().winkOverlays() }
         case .advisor:

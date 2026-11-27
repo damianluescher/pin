@@ -11,7 +11,9 @@ let package = Package(
     targets: [
         .target(name: "WinkBoards",
                 exclude: ["App/Info.plist", "App/Assets.xcassets", "App/Model.swift", "App/Wink2.swift", "App/Design.swift",
-                          "App/Composer.swift", "App/Review.swift", "App/Reply.swift"]),
+                          "App/Composer.swift", "App/Review.swift", "App/Reply.swift",
+                          // The real side panel hosts Pin itself (PinKit), a browser and the Mac's screen: Shim/SidePanel.swift stands in.
+                          "App/WinkPanel.swift"]),
         .executableTarget(name: "WinkProbe", dependencies: ["WinkBoards"]),
     ]
 )
