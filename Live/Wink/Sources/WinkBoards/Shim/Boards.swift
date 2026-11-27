@@ -42,6 +42,10 @@ public enum WinkBoards {
             return Spec(chat: "penpot", setup: { $0.openTab(.init(kind: .board, target: "Wink")) })
         case "new-side-panel-empty":
             return Spec(chat: "penpot", env: ["BOARD_PANEL": "empty"], setup: { $0.openTab(.init(kind: .board, target: "Wink")) })
+        // The panel showing what the AI does right now (27 Nov 2026), design only: an app in use, a long render, a picture coming back.
+        case "new-side-panel-live-app": return Spec(chat: "working", env: ["BOARD_PANEL": "live-app"], setup: { $0.openTab(.init(kind: .board, target: "Wink")) })
+        case "new-side-panel-live-render": return Spec(chat: "working", env: ["BOARD_PANEL": "live-render"], setup: { $0.openTab(.init(kind: .board, target: "Wink")) })
+        case "new-side-panel-live-image": return Spec(chat: "working", env: ["BOARD_PANEL": "live-image"], setup: { $0.openTab(.init(kind: .board, target: "Wink")) })
         // Playbooks (12 Nov 2026), design only: the views are in Shim/Playbooks.swift.
         case let name where name.hasPrefix("new-playbooks-"): return Spec(frame: .playbooks(String(name.dropFirst("new-playbooks-".count))))
         // A chat whose turn ended while its background job still runs (12 Nov 2026: "this looks to me like done").

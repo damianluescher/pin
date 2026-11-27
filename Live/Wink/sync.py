@@ -17,7 +17,7 @@ def must(text, old, new):
 NO_MONITOR = ("NSEvent.addLocalMonitorForEvents(", "NoEvents.addLocalMonitorForEvents(")
 files = {
     # No engine: the real connection is gone from the build, Shim/FakeEngine.swift has its name.
-    "Model.swift": lambda t: cut(t, "struct API: Sendable {", "@MainActor @Observable final class AppModel"),
+    "Model.swift": lambda t: cut(t, "struct API: Sendable {", "@MainActor @Observable final class AppModel").replace("import PinKit\n", ""),
     # No app of its own, and settings that cannot be saved.
     "Wink2.swift": lambda t: cut(cut(t, "@main\nstruct Wink2App", "/// Snapshot runs can read"), "/// Snapshot runs can read", "enum Theme {"),
     # A key or mouse watcher would take Pin's Return, Escape and right click.
